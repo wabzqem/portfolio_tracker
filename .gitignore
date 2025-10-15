@@ -4,3 +4,4 @@ node_modules
 dist/
 wabz-README.txt
 convert_ig/
+.crush.json
