@@ -1,0 +1,6 @@
+.DS_Store
+node_modules
+*.csv
+dist/
+wabz-README.txt
+convert_ig/

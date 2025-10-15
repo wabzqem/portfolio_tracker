@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Tracker</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-top">
+                <h1><i class="fas fa-chart-line"></i> Portfolio Tracker</h1>
+                <div class="global-currency-toggle">
+                    <div class="currency-toggle global">
+                        <button class="currency-btn active" data-currency="AUD" id="globalCurrencyAUD">AUD</button>
+                        <button class="currency-btn" data-currency="USD" id="globalCurrencyUSD">USD</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="tabs">
+                <button class="tab-button active" data-tab="overview">Overview</button>
+                <button class="tab-button" data-tab="performance">Performance</button>
+                <button class="tab-button" data-tab="capital-gains">Capital Gains</button>
+                <button class="tab-button" data-tab="positions">Current Positions</button>
+                <button class="tab-button" data-tab="trades">All Trades</button>
+            </div>
+
+            <div class="tab-content active" id="overview">
+                <div class="grid">
+                    <div class="card">
+                        <h3><i class="fas fa-chart-pie"></i> Portfolio Summary</h3>
+                        <div id="portfolioSummary" class="summary-content">
+                            <div class="loading">Loading portfolio data...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3><i class="fas fa-medal"></i> Best & Worst Trades</h3>
+                        <div id="topPositions" class="positions-content">
+                            <div class="loading">Loading trades...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="trades">
+                <div class="card">
+                    <h3><i class="fas fa-list"></i> All Trades</h3>
+                    <div class="table-container">
+                        <table id="tradesTable" class="trades-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Qty</th>
+                                    <th>Price</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="7" class="loading">Loading trades...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="positions">
+                <div class="card">
+                    <h3><i class="fas fa-briefcase"></i> Current Positions</h3>
+                    <div id="positionsTable" class="positions-table">
+                        <div class="loading">Loading positions...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="performance">
+                <div class="card">
+                    <h3><i class="fas fa-chart-line"></i> Performance Analytics</h3>
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(59, 130, 246, 0.1); border-radius: 10px; color: #1e40af; font-size: 0.9rem;">
+                        <i class="fas fa-info-circle"></i> <strong>Cumulative Performance Tracking:</strong> View your portfolio's performance over time with realized gains/losses from closed positions using trade-date currency conversion.
+                    </div>
+                    
+                    <div class="performance-controls" style="margin-bottom: 20px; padding: 20px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                        <div class="filter-header" style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb;">
+                            <h4 style="margin: 0; color: #374151; font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-sliders-h"></i> Performance Options
+                            </h4>
+                        </div>
+                        <div style="display: flex; gap: 30px; align-items: flex-start; flex-wrap: wrap;">
+                            <div class="filter-group" style="display: flex; flex-direction: column; gap: 6px; min-height: auto;">
+                                <label for="performanceTimeframe" style="font-size: 0.9rem; font-weight: 500; color: #374151;">
+                                    Timeframe:
+                                </label>
+                                <select id="performanceTimeframe">
+                                    <option value="all">All Time</option>
+                                    <option value="1y">Last 12 Months</option>
+                                    <option value="6m">Last 6 Months</option>
+                                    <option value="3m">Last 3 Months</option>
+                                </select>
+                            </div>
+                            <div class="filter-group" style="display: flex; flex-direction: column; gap: 6px; min-height: auto;">
+                                <label for="performanceMetric" style="font-size: 0.9rem; font-weight: 500; color: #374151;">
+                                    Chart View:
+                                </label>
+                                <select id="performanceMetric">
+                                    <option value="cumulative">Cumulative P&L</option>
+                                    <option value="monthly">Monthly P&L</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="performance-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+                        <div class="stat-card">
+                            <div class="stat-value" id="totalReturn">$0.00</div>
+                            <div class="stat-label">Total Realized P&L</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value positive" id="bestMonth">$0.00</div>
+                            <div class="stat-label">Best Month</div>
+                            <div class="stat-note" id="bestMonthPeriod">-</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value negative" id="worstMonth">$0.00</div>
+                            <div class="stat-label">Worst Month</div>
+                            <div class="stat-note" id="worstMonthPeriod">-</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="winRate">0%</div>
+                            <div class="stat-label">Win Rate</div>
+                            <div class="stat-note" id="winRateDetail">0/0 trades</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-container" style="margin-bottom: 30px; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                        <canvas id="performanceChart" width="800" height="400"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="capital-gains">
+                <div class="card">
+                    <h3><i class="fas fa-calculator"></i> Capital Gains (ATO Compliant)</h3>
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(16, 185, 129, 0.1); border-radius: 10px; color: #047857; font-size: 0.9rem;">
+                        <i class="fas fa-check-circle"></i> <strong>Tax-Accurate FIFO Calculation:</strong> This calculation uses proper First-In-First-Out methodology for tax reporting, and currency conversion on the date of trade. Use these figures for ATO capital gains declarations.
+                    </div>
+                    <div class="financial-year-selector" style="margin-bottom: 20px; padding: 20px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                        <div class="filter-header" style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb;">
+                            <h4 style="margin: 0; color: #374151; font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-calendar-alt"></i> Financial Year Selection
+                            </h4>
+                        </div>
+                        <div class="filter-group" style="display: flex; flex-direction: column; gap: 6px; min-height: auto;">
+                            <label for="financialYearSelect" style="font-size: 0.9rem; font-weight: 500; color: #374151;">
+                                Select Financial Year:
+                            </label>
+                            <select id="financialYearSelect">
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table id="capitalGainsTable" class="trades-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Symbol</th>
+                                    <th>Type</th>
+                                    <th>Qty</th>
+                                    <th>Price</th>
+                                    <th>Cost Basis</th>
+                                    <th>Proceeds</th>
+                                    <th id="capitalGainHeader">Capital Gain/Loss<br><small style="font-weight: normal; color: #6b7280;">50% discount for assets held >1yr</small></th>
+                                    <th>Holding Period</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="9" class="loading">Loading capital gains...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

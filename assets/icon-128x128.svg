@@ -1,0 +1,7 @@
+<svg width="128" height="128" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="64" cy="64" r="62" fill="#228B22"/>
+    <text x="64" y="68" font-family="Arial" font-size="42.666666666666664" fill="white" text-anchor="middle">$</text>
+    <rect x="32" y="42.666666666666664" width="16" height="32" fill="#FFD700"/>
+    <rect x="51.2" y="36.57142857142857" width="16" height="42.666666666666664" fill="#FFD700"/>
+    <rect x="71.11111111111111" y="32" width="16" height="51.2" fill="#FFD700"/>
+  </svg>

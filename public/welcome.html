@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Tracker - Welcome</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .welcome-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .welcome-content {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+        }
+        
+        .app-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        
+        .welcome-title {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 300;
+        }
+        
+        .welcome-subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+            line-height: 1.5;
+        }
+        
+        .file-drop-zone {
+            border: 3px dashed rgba(255, 255, 255, 0.5);
+            border-radius: 15px;
+            padding: 2rem;
+            margin: 2rem 0;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .file-drop-zone:hover {
+            border-color: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .file-drop-zone.dragover {
+            border-color: #4CAF50;
+            background: rgba(76, 175, 80, 0.2);
+        }
+        
+        .browse-button {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            margin: 1rem;
+        }
+        
+        .browse-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+        }
+        
+        .file-requirements {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-top: 2rem;
+            text-align: left;
+        }
+        
+        .file-requirements h4 {
+            margin-top: 0;
+            color: #FFD700;
+        }
+        
+        .file-requirements ul {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+        }
+        
+        .file-requirements li {
+            margin: 0.5rem 0;
+            opacity: 0.9;
+        }
+        
+        .loading {
+            display: none;
+            margin-top: 2rem;
+        }
+        
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #fff;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid rgba(244, 67, 54, 0.5);
+            color: #ffcdd2;
+            padding: 1rem;
+            border-radius: 10px;
+            margin-top: 1rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="welcome-container">
+        <div class="welcome-content">
+            <div class="app-icon">📊</div>
+            <h1 class="welcome-title">Portfolio Tracker</h1>
+            <p class="welcome-subtitle">
+                Track your investment portfolio with analytics, trade data,
+                capital gains calculations, and performance insights.
+            </p>
+            
+            <div class="file-drop-zone" id="dropZone">
+                <h3>📁 Load Your Trading Data</h3>
+                <p>Drag and drop your trade history CSV file here</p>
+                <p>or</p>
+                <button class="browse-button" id="browseButton">Browse Files</button>
+                <input type="file" id="fileInput" accept=".csv" style="display: none;">
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Loading and processing your trading data...</p>
+            </div>
+            
+            <div class="error-message" id="errorMessage"></div>
+            
+            <div class="file-requirements">
+                <p>Load a CSV file from the moomoo desktop application. To export in moomoo, go to Accounts -> Securities, click "History", select a large date range up to today, and then click the Export icon.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="welcome.js"></script>
+</body>
+</html>
