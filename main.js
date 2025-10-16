@@ -173,6 +173,12 @@ function createFallbackRates() {
 
 // Get USD to AUD rate for a specific date (with fallback logic)
 function getUSDToAUDRate(date) {
+  // Safety check for undefined date
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    console.warn('Invalid date passed to getUSDToAUDRate:', date);
+    return 1.5; // Fallback rate
+  }
+  
   const dateKey = date.toISOString().split('T')[0];
   
   if (currencyRates.has(dateKey)) {
@@ -651,7 +657,20 @@ ipcMain.handle('get-trades', (event, options = {}) => {
   const displayCurrency = options.currency || 'AUD';
   const includeExpired = options.includeExpired === true;
   
-  const allTrades = portfolioData.filter(trade => isExecutedStatus(trade.Status));
+  let allTrades = portfolioData.filter(trade => isExecutedStatus(trade.Status));
+  
+  // Add synthetic sell trades for expired options if requested
+  if (includeExpired) {
+    const syntheticSells = getExpiredOptionSyntheticSells(portfolioData);
+    allTrades = [...allTrades, ...syntheticSells];
+    
+    // Sort all trades by date (newest first) to ensure proper chronological order
+    allTrades.sort((a, b) => {
+      const dateA = parseCSVDate(a['Fill Time'] || a['Order Time']);
+      const dateB = parseCSVDate(b['Fill Time'] || b['Order Time']);
+      return dateB - dateA; // Newest first (descending order)
+    });
+  }
   
   // Convert trades to match the API response format
   const convertedTrades = allTrades.map(trade => {
@@ -911,6 +930,11 @@ function calculateCapitalGains(trades, financialYear = null) {
       symbol: symbol,
       name: trade.Name,
       market: trade.market, // Add market info for currency conversion
+      // Store original amounts and date for later conversion
+      originalAmount: amount,
+      originalCommission: parseFloat(trade['Commission']) || 0,
+      originalFees: parseFloat(trade['Total']) || 0,
+      tradeDate: parseCSVDate(trade['Fill Time']),
       // Convert all amounts to AUD for Capital Gains (ATO requirement)
       amountAUD: convertCurrency(amount, trade.market, 'AUD', parseCSVDate(trade['Fill Time'])),
       commissionAUD: convertCurrency(parseFloat(trade['Commission']) || 0, trade.market, 'AUD', parseCSVDate(trade['Fill Time'])),
@@ -934,22 +958,41 @@ function calculateCapitalGains(trades, financialYear = null) {
         optionsInfo.didExpire = trade.isSynthetic || false;
       }
       if (trade.side === 'Buy') {
-        // Use AUD amounts for Capital Gains (ATO requirement)
-        const totalCost = trade.amountAUD + trade.commissionAUD + trade.feesAUD;
+        // Convert to AUD using the original purchase date's exchange rate
+        const tradeDate = trade.tradeDate || trade.date; // Fallback to trade.date if tradeDate is undefined
+        const originalAmount = trade.originalAmount !== undefined ? trade.originalAmount : trade.amount;
+        const originalCommission = trade.originalCommission !== undefined ? trade.originalCommission : (trade.commission || 0);
+        const originalFees = trade.originalFees !== undefined ? trade.originalFees : (trade.fees || 0);
+        
+        const amountAUD = convertCurrency(originalAmount, trade.market, 'AUD', tradeDate);
+        const commissionAUD = convertCurrency(originalCommission, trade.market, 'AUD', tradeDate);
+        const feesAUD = convertCurrency(originalFees, trade.market, 'AUD', tradeDate);
+        const totalCost = amountAUD + commissionAUD + feesAUD;
         
         holdings.push({
           qty: trade.qty,
           price: trade.price,
-          priceAUD: trade.amountAUD / trade.qty, // AUD price per unit
+          priceAUD: amountAUD / trade.qty, // AUD price per unit using purchase date rate
           date: trade.date,
-          cost: totalCost
+          cost: totalCost,
+          originalPurchaseRate: trade.market === 'US' ? getUSDToAUDRate(trade.tradeDate) : 1.0 // Store for debugging
         });
       } else if (trade.side === 'Sell') {
         // Include sells within the financial year date range, including synthetic sells for expired options within the period
         if (trade.date >= cutoffDateStart && trade.date <= cutoffDateEnd) {
+          // Convert sell amounts using the sell date's exchange rate
+          const tradeDate = trade.tradeDate || trade.date; // Fallback to trade.date if tradeDate is undefined
+          const originalAmount = trade.originalAmount !== undefined ? trade.originalAmount : trade.amount;
+          const originalCommission = trade.originalCommission !== undefined ? trade.originalCommission : (trade.commission || 0);
+          const originalFees = trade.originalFees !== undefined ? trade.originalFees : (trade.fees || 0);
+          
+          const sellAmountAUD = convertCurrency(originalAmount, trade.market, 'AUD', tradeDate);
+          const sellCommissionAUD = convertCurrency(originalCommission, trade.market, 'AUD', tradeDate);
+          const sellFeesAUD = convertCurrency(originalFees, trade.market, 'AUD', tradeDate);
+          
           let remainingQty = trade.qty;
-          let sellPricePerUnit = trade.qty > 0 ? (trade.amountAUD || 0) / trade.qty : 0;
-          let totalCommissionAndFees = (trade.commissionAUD || 0) + (trade.feesAUD || 0);
+          let sellPricePerUnit = trade.qty > 0 ? sellAmountAUD / trade.qty : 0;
+          let totalCommissionAndFees = sellCommissionAUD + sellFeesAUD;
           
           // Process each FIFO lot separately to get correct holding periods
           while (remainingQty > 0 && holdings.length > 0) {
@@ -1006,8 +1049,13 @@ function calculateCapitalGains(trades, financialYear = null) {
             const holding = holdings[0];
             const qtyToSell = Math.min(remainingQty, holding.qty);
             
+            // Calculate cost basis for the portion being sold
+            const costPerShare = holding.cost / holding.qty;
+            const costBasisToRemove = costPerShare * qtyToSell;
+            
             remainingQty -= qtyToSell;
             holding.qty -= qtyToSell;
+            holding.cost -= costBasisToRemove; // Reduce cost proportionally when qty is reduced
             
             if (holding.qty === 0) holdings.shift();
           }
@@ -1028,6 +1076,105 @@ function calculateHoldingPeriodFromSold(soldHoldings, sellDate) {
   const daysDiff = (sellDate.getTime() - earliestSoldDate) / (1000 * 60 * 60 * 24);
   
   return Math.floor(daysDiff);
+}
+
+// Get synthetic sells for trades view (reuses capital gains logic)
+function getExpiredOptionSyntheticSells(trades) {
+  // Use a simplified version of the capital gains grouping to find expired options
+  const symbolGroups = {};
+  const allFilledTrades = trades.filter(trade => isExecutedStatus(trade.Status));
+  
+  // Group trades by symbol (same as capital gains)
+  allFilledTrades.forEach(trade => {
+    const symbol = trade.Symbol;
+    if (!symbolGroups[symbol]) symbolGroups[symbol] = [];
+    
+    const fillData = parseFilledAvg(trade['Filled@Avg Price'], symbol);
+    symbolGroups[symbol].push({
+      side: trade.Side,
+      qty: fillData.qty,
+      date: parseCSVDate(trade['Fill Time']),
+      trade: trade // Keep reference to original trade
+    });
+  });
+  
+  // Run the existing expired options logic to add synthetic sells
+  addExpiredOptionsLosses(symbolGroups, trades);
+  
+  // Convert synthetic trades to CSV format for the trades view
+  const syntheticSells = [];
+  Object.keys(symbolGroups).forEach(symbol => {
+    const trades = symbolGroups[symbol];
+    const syntheticTrades = trades.filter(t => t.isSynthetic);
+    
+    syntheticTrades.forEach(syntheticTrade => {
+      const expiryDate = syntheticTrade.date;
+      
+      // Create CSV-formatted synthetic sell
+      const syntheticSell = {
+        Side: 'Sell',
+        Symbol: symbol,
+        Name: syntheticTrade.name || symbol,
+        'Order Price': '0.00',
+        'Order Qty': syntheticTrade.qty.toString(),
+        'Order Amount': '0.00',
+        Status: 'Filled',
+        'Filled@Avg Price': `${syntheticTrade.qty}@0.00`,
+        'Order Time': expiryDate.toLocaleString('en-US', { 
+          month: 'short', 
+          day: '2-digit', 
+          year: 'numeric', 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          second: '2-digit',
+          timeZone: 'UTC'
+        }).replace(/,/, '') + ' ET',
+        'Order Type': 'Market',
+        'Time-in-Force': 'Day',
+        'Allow Pre-Market': '',
+        Session: '',
+        'Trigger price': '',
+        'Position Opening': '',
+        Markets: syntheticTrade.market || 'US',
+        Currency: syntheticTrade.market === 'AU' ? 'AUD' : 'USD',
+        'Order Source': 'EXPIRED',
+        'Fill Qty': syntheticTrade.qty.toString(),
+        'Fill Price': '0.00',
+        'Fill Amount': '0.00',
+        'Fill Time': expiryDate.toLocaleString('en-US', { 
+          month: 'short', 
+          day: '2-digit', 
+          year: 'numeric', 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          second: '2-digit',
+          timeZone: 'UTC'
+        }).replace(/,/, '') + ' ET',
+        'Markets.1': syntheticTrade.market || 'US',
+        'Currency.1': syntheticTrade.market === 'AU' ? 'AUD' : 'USD',
+        Counterparty: '',
+        Remarks: 'SYNTHETIC EXPIRED OPTION SELL',
+        Commission: '0.00',
+        'Platform Fees': '',
+        'Options Regulatory Fees': '',
+        'OCC Fees': '',
+        'Platform Fee': '',
+        'Settlement Fee': '',
+        'Trading Activity Fee': '',
+        'Trading Activity Fees': '',
+        'Consolidated Audit Trail': '0.00',
+        '': '',
+        '.1': '',
+        market: syntheticTrade.market || 'US',
+        isExpired: true,
+        isSynthetic: true
+      };
+      
+      syntheticSells.push(syntheticSell);
+    });
+  });
+  
+  return syntheticSells;
 }
 
 // Add synthetic sell trades for expired options with remaining holdings
@@ -1071,6 +1218,11 @@ function addExpiredOptionsLosses(symbolGroups, allTrades = null) {
         symbol: symbol,
         name: sampleTrade ? sampleTrade.name : symbol,
         market: sampleTrade ? sampleTrade.market : 'US', // Add market info
+        // Add original amounts for currency conversion
+        originalAmount: 0,
+        originalCommission: 0,
+        originalFees: 0,
+        tradeDate: expiryDate,
         // Add AUD conversion fields for capital gains calculation
         amountAUD: 0, // No proceeds in any currency
         commissionAUD: 0,
@@ -1107,6 +1259,11 @@ function addExpiredOptionsLosses(symbolGroups, allTrades = null) {
           symbol: symbol,
           name: symbol, // Use symbol as name if we don't have trade data
           market: 'US', // Default market for historical positions
+          // Add original amounts for currency conversion
+          originalAmount: 0,
+          originalCommission: 0,
+          originalFees: 0,
+          tradeDate: expiryDate,
           // Add AUD conversion fields for capital gains calculation
           amountAUD: 0, // No proceeds in any currency
           commissionAUD: 0,
