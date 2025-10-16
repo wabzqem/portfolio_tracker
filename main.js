@@ -948,9 +948,10 @@ function calculateCapitalGains(trades, financialYear = null) {
         // Include sells within the financial year date range, including synthetic sells for expired options within the period
         if (trade.date >= cutoffDateStart && trade.date <= cutoffDateEnd) {
           let remainingQty = trade.qty;
-          let totalCost = 0;
-          let soldHoldings = []; // Track which holdings were sold for holding period calculation
+          let sellPricePerUnit = trade.qty > 0 ? (trade.amountAUD || 0) / trade.qty : 0;
+          let totalCommissionAndFees = (trade.commissionAUD || 0) + (trade.feesAUD || 0);
           
+          // Process each FIFO lot separately to get correct holding periods
           while (remainingQty > 0 && holdings.length > 0) {
             const holding = holdings[0];
             const qtyToSell = Math.min(remainingQty, holding.qty);
@@ -958,13 +959,37 @@ function calculateCapitalGains(trades, financialYear = null) {
             const costPerShare = holding.cost / holding.qty;
             const costBasis = costPerShare * qtyToSell;
             
-            // Track this sold holding for holding period calculation
-            soldHoldings.push({
-              date: holding.date,
-              qty: qtyToSell
+            // Calculate proceeds for this lot (proportional to quantity)
+            const proceedsForLot = qtyToSell * sellPricePerUnit;
+            
+            // Allocate commission and fees proportionally
+            const commissionAndFeesForLot = totalCommissionAndFees * (qtyToSell / trade.qty);
+            
+            const netProceedsForLot = proceedsForLot - commissionAndFeesForLot;
+            const capitalGainForLot = netProceedsForLot - costBasis;
+            
+            // Calculate holding period for this specific lot
+            const holdingPeriod = Math.floor((trade.date.getTime() - holding.date.getTime()) / (1000 * 60 * 60 * 24));
+            
+            // Create separate capital gain entry for each FIFO lot
+            capitalGains.push({
+              symbol: symbol,
+              name: trade.name,
+              isOption: optionsInfo !== null,
+              optionsInfo: optionsInfo,
+              sellDate: trade.date,
+              buyDate: holding.date,
+              qty: qtyToSell,
+              sellPrice: sellPricePerUnit, // AUD price per unit
+              costBasis: costBasis,
+              proceeds: netProceedsForLot,
+              capitalGain: capitalGainForLot,
+              holdingPeriod: holdingPeriod,
+              isLongTerm: holdingPeriod >= 365, // Track if this lot qualifies for discount
+              currency: 'AUD', // Mark as AUD for display
+              market: trade.market // Original market for reference
             });
             
-            totalCost += costBasis;
             remainingQty -= qtyToSell;
             holding.qty -= qtyToSell;
             holding.cost -= costBasis; // Reduce cost proportionally when qty is reduced
@@ -973,33 +998,6 @@ function calculateCapitalGains(trades, financialYear = null) {
               holdings.shift();
             }
           }
-          
-          // Use AUD amounts for Capital Gains (ATO requirement)
-          const netProceeds = (trade.amountAUD || 0) - (trade.commissionAUD || 0) - (trade.feesAUD || 0);
-          const capitalGain = netProceeds - totalCost;
-          
-          // Calculate holding period based on sold holdings (not remaining holdings)
-          const holdingPeriod = calculateHoldingPeriodFromSold(soldHoldings, trade.date);
-          
-          // Calculate sell price per unit safely
-          const sellPricePerUnit = trade.qty > 0 ? (trade.amountAUD || 0) / trade.qty : 0;
-          
-          capitalGains.push({
-            symbol: symbol,
-            name: trade.name,
-            isOption: optionsInfo !== null,
-            optionsInfo: optionsInfo,
-            sellDate: trade.date,
-            buyDate: soldHoldings.length > 0 ? soldHoldings[0].date : null,
-            qty: trade.qty,
-            sellPrice: sellPricePerUnit, // AUD price per unit
-            costBasis: totalCost,
-            proceeds: netProceeds,
-            capitalGain: capitalGain,
-            holdingPeriod: holdingPeriod,
-            currency: 'AUD', // Mark as AUD for display
-            market: trade.market // Original market for reference
-          });
         } else {
           // For historical sells (before cutoff), still need to remove from holdings
           let remainingQty = trade.qty;

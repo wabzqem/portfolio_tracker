@@ -198,7 +198,8 @@ class PortfolioTracker {
     // Calculate the discounted capital gain for long-term holdings (> 1 year)
     calculateDiscountedCapitalGain(gain) {
         const fullGain = gain.capitalGain;
-        const isLongTerm = gain.holdingPeriod >= 365;
+        // Use the backend-calculated isLongTerm field if available (more accurate FIFO)
+        const isLongTerm = gain.isLongTerm !== undefined ? gain.isLongTerm : gain.holdingPeriod >= 365;
         const shouldApplyDiscount = this.applyLongTermDiscount && isLongTerm && fullGain > 0;
         const discountedGain = shouldApplyDiscount ? fullGain / 2 : fullGain;
         
