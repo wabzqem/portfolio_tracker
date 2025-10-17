@@ -4,6 +4,14 @@ const fs = require('fs');
 const csv = require('csv-parser');
 const https = require('https');
 
+// Constants
+const POSITION_TOLERANCE = 0.1; // Minimum position size considered significant
+const EXPIRED_OPTION_TOLERANCE = 0.01; // Tolerance for expired option holdings
+const LONG_TERM_HOLDING_DAYS = 365; // Days required for long-term capital gains
+const CURRENCY_RATE_SEARCH_DAYS = 7; // Days to search for nearest currency rate
+const FALLBACK_USD_AUD_RATE = 1.5; // Fallback exchange rate if no data available
+const OPTIONS_MULTIPLIER = 100; // Standard options contract multiplier
+
 // Set application name immediately
 app.setName('Portfolio Tracker');
 
@@ -54,8 +62,6 @@ function loadCurrencyRates() {
 // Download currency data from URL
 function downloadCurrencyData(url) {
   return new Promise((resolve, reject) => {
-    const data = [];
-    
     https.get(url, (response) => {
       // Handle redirects (Google Drive uses 303 redirects)
       if (response.statusCode === 302 || response.statusCode === 301 || response.statusCode === 303) {
@@ -103,15 +109,12 @@ function downloadCurrencyData(url) {
           const parts = line.split(',');
           if (parts.length >= 2) {
             const dateStr = parts[0].trim();
-            const rate = parseFloat(parts[1].trim());
+            const rateStr = parts[1].trim();
             
-            if (dateStr && !isNaN(rate) && rate > 0) {
-              const date = new Date(dateStr + ' 12:00:00 UTC');
-              if (!isNaN(date.getTime())) {
-                const dateKey = date.toISOString().split('T')[0];
-                currencyRates.set(dateKey, rate);
-                processedRates++;
-              }
+            const parsed = parseCurrencyRateLine(dateStr, rateStr);
+            if (parsed) {
+              currencyRates.set(parsed.dateKey, parsed.rate);
+              processedRates++;
             }
           }
         }
@@ -135,14 +138,11 @@ function loadCurrencyRatesFromFile(filePath) {
       .pipe(csv())
       .on('data', (row) => {
         const dateStr = row.Date;
-        const rate = parseFloat(row['USD to AUD']);
+        const rateStr = row['USD to AUD'];
         
-        if (dateStr && !isNaN(rate) && rate > 0) {
-          const date = new Date(dateStr + ' 12:00:00 UTC');
-          if (!isNaN(date.getTime())) {
-            const dateKey = date.toISOString().split('T')[0];
-            currencyRates.set(dateKey, rate);
-          }
+        const parsed = parseCurrencyRateLine(dateStr, rateStr);
+        if (parsed) {
+          currencyRates.set(parsed.dateKey, parsed.rate);
         }
       })
       .on('end', () => {
@@ -163,7 +163,7 @@ function createFallbackRates() {
   // Create basic rates for the last few years
   const startDate = new Date('2020-01-01');
   const endDate = new Date();
-  const baseRate = 1.5; // Approximate AUD/USD rate
+  const baseRate = FALLBACK_USD_AUD_RATE;
   
   for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 30)) {
     const dateKey = d.toISOString().split('T')[0];
@@ -181,7 +181,7 @@ function getUSDToAUDRate(date) {
   // Safety check for undefined date
   if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
     console.warn('Invalid date passed to getUSDToAUDRate:', date);
-    return 1.5; // Fallback rate
+    return FALLBACK_USD_AUD_RATE;
   }
   
   const dateKey = date.toISOString().split('T')[0];
@@ -190,8 +190,8 @@ function getUSDToAUDRate(date) {
     return currencyRates.get(dateKey);
   }
   
-  // Find nearest date (within 7 days)
-  for (let i = 1; i <= 7; i++) {
+  // Find nearest date (within CURRENCY_RATE_SEARCH_DAYS days)
+  for (let i = 1; i <= CURRENCY_RATE_SEARCH_DAYS; i++) {
     // Try earlier date
     const earlierDate = new Date(date);
     earlierDate.setDate(earlierDate.getDate() - i);
@@ -209,7 +209,7 @@ function getUSDToAUDRate(date) {
     }
   }
   
-  return 1.5; // Fallback rate
+  return FALLBACK_USD_AUD_RATE;
 }
 
 // Create application menu
@@ -447,9 +447,6 @@ function createWindow() {
     show: false // Don't show until ready
   });
 
-  // Create application menu
-  createMenu();
-
   // Load appropriate page based on whether trades are loaded
   if (tradesLoaded) {
     mainWindow.loadFile('public/index.html');
@@ -524,7 +521,32 @@ function parseFilledAvg(column, symbol) {
 }
 
 function getMultiplier(symbol) {
-  return isOption(symbol) ? 100 : 1;
+  return isOption(symbol) ? OPTIONS_MULTIPLIER : 1;
+}
+
+function getTradeCommission(trade) {
+  return parseFloat(trade['Commission']) || 0;
+}
+
+function getTradeFees(trade) {
+  return parseFloat(trade['Total']) || 0;
+}
+
+// Helper function to parse and validate currency rate entries
+function parseCurrencyRateLine(dateStr, rateStr) {
+  const rate = parseFloat(rateStr);
+  
+  if (!dateStr || isNaN(rate) || rate <= 0) {
+    return null;
+  }
+  
+  const date = new Date(dateStr + ' 12:00:00 UTC');
+  if (isNaN(date.getTime())) {
+    return null;
+  }
+  
+  const dateKey = date.toISOString().split('T')[0];
+  return { dateKey, rate };
 }
 
 function parseOptionsSymbol(symbol) {
@@ -712,8 +734,8 @@ ipcMain.handle('get-trades', (event, options = {}) => {
     
     if (needsConversion && correctFillAmount > 0) {
       const convertedFillAmount = convertCurrency(correctFillAmount, originalMarket, displayCurrency, tradeDate);
-      const commission = parseFloat(trade['Commission']) || 0;
-      const fees = parseFloat(trade['Total']) || 0;
+      const commission = getTradeCommission(trade);
+      const fees = getTradeFees(trade);
       const convertedCommission = convertCurrency(commission, originalMarket, displayCurrency, tradeDate);
       const convertedFees = convertCurrency(fees, originalMarket, displayCurrency, tradeDate);
       
@@ -899,8 +921,8 @@ function calculatePortfolioSummary(trades, displayCurrency = 'AUD') {
   
   // Filter out expired options from current positions
   const currentPositions = Object.values(symbolStats).filter(pos => {
-    // Use tolerance for floating point comparison - positions smaller than 0.1 are considered zero
-    const hasSignificantPosition = Math.abs(pos.netPosition) >= 0.1;
+    // Use tolerance for floating point comparison
+    const hasSignificantPosition = Math.abs(pos.netPosition) >= POSITION_TOLERANCE;
     
     if (pos.isOption && pos.optionsInfo) {
       return !pos.optionsInfo.isExpired && hasSignificantPosition;
@@ -957,20 +979,20 @@ function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = t
       price,
       amount: amount, // Total Fill Amount already includes multiplier from aggregation
       date: parseCSVDate(trade['Fill Time']),
-      commission: parseFloat(trade['Commission']) || 0,
-      fees: parseFloat(trade['Total']) || 0,
+      commission: getTradeCommission(trade),
+      fees: getTradeFees(trade),
       symbol: symbol,
       name: trade.Name,
       market: trade.market, // Add market info for currency conversion
       // Store original amounts and date for later conversion
       originalAmount: amount,
-      originalCommission: parseFloat(trade['Commission']) || 0,
-      originalFees: parseFloat(trade['Total']) || 0,
+      originalCommission: getTradeCommission(trade),
+      originalFees: getTradeFees(trade),
       tradeDate: parseCSVDate(trade['Fill Time']),
       // Convert all amounts to AUD for Capital Gains (ATO requirement)
       amountAUD: convertCurrency(amount, trade.market, 'AUD', parseCSVDate(trade['Fill Time'])),
-      commissionAUD: convertCurrency(parseFloat(trade['Commission']) || 0, trade.market, 'AUD', parseCSVDate(trade['Fill Time'])),
-      feesAUD: convertCurrency(parseFloat(trade['Total']) || 0, trade.market, 'AUD', parseCSVDate(trade['Fill Time']))
+      commissionAUD: convertCurrency(getTradeCommission(trade), trade.market, 'AUD', parseCSVDate(trade['Fill Time'])),
+      feesAUD: convertCurrency(getTradeFees(trade), trade.market, 'AUD', parseCSVDate(trade['Fill Time']))
     });
   });
   
@@ -1061,7 +1083,7 @@ function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = t
                 proceeds: netProceedsForLot,
                 capitalGain: capitalGainForLot,
                 holdingPeriod: holdingPeriod,
-                isLongTerm: holdingPeriod >= 365, // Track if this lot qualifies for discount
+                isLongTerm: holdingPeriod >= LONG_TERM_HOLDING_DAYS,
                 currency: 'AUD', // Mark as AUD for display
                 market: trade.market // Original market for reference
               });
@@ -1129,7 +1151,7 @@ function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = t
                 proceeds: netProceeds,
                 capitalGain: capitalGain,
                 holdingPeriod: avgHoldingPeriod,
-                isLongTerm: avgHoldingPeriod >= 365,
+                isLongTerm: avgHoldingPeriod >= LONG_TERM_HOLDING_DAYS,
                 currency: 'AUD',
                 market: trade.market
               });
@@ -1159,17 +1181,6 @@ function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = t
   });
   
   return capitalGains.sort((a, b) => b.sellDate - a.sellDate);
-}
-
-// Calculate holding period from the actual sold holdings (for capital gains)
-function calculateHoldingPeriodFromSold(soldHoldings, sellDate) {
-  if (soldHoldings.length === 0) return 0;
-  
-  // Use the earliest sold holding date (FIFO - first in, first out)
-  const earliestSoldDate = Math.min(...soldHoldings.map(h => h.date.getTime()));
-  const daysDiff = (sellDate.getTime() - earliestSoldDate) / (1000 * 60 * 60 * 24);
-  
-  return Math.floor(daysDiff);
 }
 
 // Get synthetic sells for trades view (reuses capital gains logic)
@@ -1295,7 +1306,7 @@ function addExpiredOptionsLosses(symbolGroups, allTrades = null) {
     });
     
     // If there are remaining holdings at expiry, add a synthetic sell at $0
-    if (remainingHoldings > 0.01) { // Use small tolerance for floating point
+    if (remainingHoldings > EXPIRED_OPTION_TOLERANCE) {
       
       // Find a trade to get the name
       const sampleTrade = trades.find(t => t.name) || trades[0];
@@ -1340,7 +1351,7 @@ function addExpiredOptionsLosses(symbolGroups, allTrades = null) {
       const expiryDate = new Date(optionsInfo.expiryDate);
       
       const position = historicalPositions[symbol];
-      if (position.netPosition > 0.01) {        
+      if (position.netPosition > EXPIRED_OPTION_TOLERANCE) {        
         // Create a new symbol group for this historical position
         symbolGroups[symbol] = [{
           side: 'Sell',
@@ -1392,8 +1403,8 @@ function calculateHistoricalCostBasis(trades) {
       price: fillData.price, // Now includes multiplier
       amount: amount,
       date: parseCSVDate(trade['Fill Time']),
-      commission: parseFloat(trade['Commission']) || 0,
-      fees: parseFloat(trade['Total']) || 0
+      commission: getTradeCommission(trade),
+      fees: getTradeFees(trade)
     });
   });
   
@@ -1591,8 +1602,8 @@ function calculateFIFOPnL(trades, displayCurrency = 'AUD') {
     // Keep all amounts in ORIGINAL currency - no conversion during calculation
     const tradeDate = parseCSVDate(trade['Fill Time']);
     const originalAmount = amount;
-    const originalCommission = parseFloat(trade['Commission']) || 0;
-    const originalFees = parseFloat(trade['Total']) || 0;
+    const originalCommission = getTradeCommission(trade);
+    const originalFees = getTradeFees(trade);
     
     symbolGroups[symbol].push({
       side: trade.Side,
