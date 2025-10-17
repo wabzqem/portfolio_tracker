@@ -804,6 +804,12 @@ ipcMain.handle('get-capital-gains-aggregated', (event, financialYear) => {
   return capitalGains;
 });
 
+ipcMain.handle('get-best-worst-trades', (event, options = {}) => {
+  const currency = options.currency || 'AUD';
+  const bestWorstTrades = calculateBestWorstTrades(portfolioData, currency);
+  return bestWorstTrades;
+});
+
 ipcMain.handle('get-positions', () => {
   // Calculate current positions
   return [];
@@ -1581,6 +1587,127 @@ function calculatePerformanceData(trades, timeframe = 'all', metric = 'cumulativ
     metric: metric,
     currency: displayCurrency
   };
+}
+
+// Calculate best and worst trades using FIFO methodology with currency conversion
+function calculateBestWorstTrades(trades, displayCurrency = 'AUD') {
+  const allFilledTrades = trades.filter(trade => isExecutedStatus(trade.Status));
+  const symbolGroups = {};
+  
+  // Group trades by symbol
+  allFilledTrades.forEach(trade => {
+    const symbol = trade.Symbol;
+    if (!symbolGroups[symbol]) symbolGroups[symbol] = [];
+    
+    const fillData = parseFilledAvg(trade['Filled@Avg Price'], symbol);
+    const qty = fillData.qty;
+    const price = fillData.price;
+    const amount = qty * price;
+    const tradeDate = parseCSVDate(trade['Fill Time']);
+    
+    symbolGroups[symbol].push({
+      side: trade.Side,
+      qty,
+      price,
+      amount: amount,
+      date: tradeDate,
+      commission: getTradeCommission(trade),
+      fees: getTradeFees(trade),
+      symbol: symbol,
+      name: trade.Name,
+      market: trade.market,
+      originalCurrency: trade.market === 'US' ? 'USD' : 'AUD'
+    });
+  });
+  
+  // Add synthetic sell trades for expired options
+  addExpiredOptionsLosses(symbolGroups, trades);
+  
+  const allSellTrades = [];
+  
+  // Process each symbol to calculate P&L for individual sell transactions
+  Object.keys(symbolGroups).forEach(symbol => {
+    const trades = symbolGroups[symbol].sort((a, b) => a.date - b.date);
+    const optionsInfo = parseOptionsSymbol(symbol);
+    let holdingsQueue = [];
+    
+    trades.forEach(trade => {
+      const tradeCurrency = trade.originalCurrency || 'USD';
+      
+      if (trade.side === 'Buy') {
+        const totalCost = trade.amount + trade.commission + trade.fees;
+        holdingsQueue.push({
+          qty: trade.qty,
+          costBasis: totalCost,
+          costPerShare: totalCost / trade.qty,
+          currency: tradeCurrency,
+          date: trade.date
+        });
+      } else if (trade.side === 'Sell') {
+        let remainingQtyToSell = trade.qty;
+        let totalCostBasisSold = 0;
+        let earliestBuyDate = null;
+        let totalHoldingPeriodWeighted = 0;
+        let qtySold = 0;
+        
+        // Calculate cost basis using FIFO
+        while (remainingQtyToSell > 0 && holdingsQueue.length > 0) {
+          const holding = holdingsQueue[0];
+          const qtyFromThisHolding = Math.min(remainingQtyToSell, holding.qty);
+          const costBasisForThisQty = holding.costPerShare * qtyFromThisHolding;
+          
+          totalCostBasisSold += costBasisForThisQty;
+          qtySold += qtyFromThisHolding;
+          
+          // Track earliest buy date and weighted holding period
+          if (!earliestBuyDate || holding.date < earliestBuyDate) {
+            earliestBuyDate = holding.date;
+          }
+          const holdingPeriod = Math.floor((trade.date.getTime() - holding.date.getTime()) / (1000 * 60 * 60 * 24));
+          totalHoldingPeriodWeighted += holdingPeriod * qtyFromThisHolding;
+          
+          remainingQtyToSell -= qtyFromThisHolding;
+          holding.qty -= qtyFromThisHolding;
+          holding.costBasis -= costBasisForThisQty;
+          
+          if (holding.qty <= 0) {
+            holdingsQueue.shift();
+          }
+        }
+        
+        // Calculate P&L in original currency first
+        const sellProceeds = trade.amount - trade.commission - trade.fees;
+        const realizedPnLOriginal = sellProceeds - totalCostBasisSold;
+        
+        // Convert to display currency using current rates (consistent with portfolio summary)
+        const currentDate = new Date();
+        const conversionRate = tradeCurrency === 'USD' 
+          ? (displayCurrency === 'USD' ? 1 : getUSDToAUDRate(currentDate))
+          : (displayCurrency === 'AUD' ? 1 : (1 / getUSDToAUDRate(currentDate)));
+        
+        const realizedPnL = realizedPnLOriginal * conversionRate;
+        const avgHoldingPeriod = qtySold > 0 ? Math.floor(totalHoldingPeriodWeighted / qtySold) : 0;
+        
+        // Create trade record for this sell transaction
+        allSellTrades.push({
+          symbol: symbol,
+          name: trade.name,
+          isOption: optionsInfo !== null,
+          optionsInfo: optionsInfo,
+          sellDate: trade.date,
+          buyDate: earliestBuyDate,
+          qty: qtySold,
+          capitalGain: realizedPnL, // Use same field name as capital gains for frontend compatibility
+          holdingPeriod: avgHoldingPeriod,
+          isLongTerm: avgHoldingPeriod >= LONG_TERM_HOLDING_DAYS,
+          currency: displayCurrency,
+          market: trade.market
+        });
+      }
+    });
+  });
+  
+  return allSellTrades;
 }
 
 // Accurate FIFO P&L calculation with currency-aware totaling

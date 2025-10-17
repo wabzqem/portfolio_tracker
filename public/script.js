@@ -3,7 +3,7 @@ class PortfolioTracker {
         this.trades = [];
         this.summary = null;
         this.capitalGains = [];
-        this.allGains = [];
+        this.bestWorstTrades = [];
         this.financialYears = [];
         this.selectedFinancialYear = null;
         this.currentPage = 1;
@@ -100,6 +100,9 @@ class PortfolioTracker {
             // Load portfolio summary with currency
             await this.loadPortfolioSummary();
             
+            // Load best/worst trades with currency
+            await this.loadAllGains();
+            
             // Load trades with currency and expired options
             this.trades = await window.electronAPI.getTrades({
                 currency: this.currentCurrency,
@@ -157,14 +160,16 @@ class PortfolioTracker {
 
     async loadAllGains() {
         try {
-            this.allGains = await window.electronAPI.getCapitalGainsAggregated(null);
+            this.bestWorstTrades = await window.electronAPI.getBestWorstTrades({
+                currency: this.currentCurrency
+            });
             
             // Update the overview view if it's currently active
-            if (document.getElementById('capital-gains').classList.contains('active')) {
+            if (document.getElementById('overview').classList.contains('active')) {
                 this.renderOverview();
             }
         } catch (error) {
-            console.error('Error loading all gains:', error);
+            console.error('Error loading best/worst trades:', error);
         }
     }
 
@@ -314,13 +319,13 @@ class PortfolioTracker {
     }
 
     renderTopTrades() {
-        if (!this.trades || this.allGains.length === 0) {
+        if (!this.trades || this.bestWorstTrades.length === 0) {
             document.getElementById('topPositions').innerHTML = '<div class="loading">No completed trades found</div>';
             return;
         }
 
         // Sort capital gains by profit/loss
-        const sortedTrades = [...this.allGains].sort((a, b) => b.capitalGain - a.capitalGain);
+        const sortedTrades = [...this.bestWorstTrades].sort((a, b) => b.capitalGain - a.capitalGain);
         
         // Get top 5 winners and top 5 losers
         const topWinners = sortedTrades.slice(0, 5);

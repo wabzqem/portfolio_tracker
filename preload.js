@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPositions: () => ipcRenderer.invoke('get-positions'),
   getCapitalGains: (financialYear) => ipcRenderer.invoke('get-capital-gains', financialYear),
   getCapitalGainsAggregated: (financialYear) => ipcRenderer.invoke('get-capital-gains-aggregated', financialYear),
+  getBestWorstTrades: (options) => ipcRenderer.invoke('get-best-worst-trades', options),
   getFinancialYears: () => ipcRenderer.invoke('get-financial-years'),
   
   // File operations
