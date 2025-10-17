@@ -1,7 +1,7 @@
 {
   "name": "portfolio-tracker",
   "productName": "Portfolio Tracker",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Portfolio tracking application",
   "main": "main.js",
   "scripts": {
