@@ -10,7 +10,10 @@
     "web": "node server.js",
     "web-dev": "nodemon server.js",
     "build": "electron-builder",
-    "dist": "electron-builder --publish=never"
+    "dist": "electron-builder --publish=never",
+    "dist:mac": "electron-builder --mac --publish=never",
+    "dist:win": "electron-builder --win --publish=never",
+    "dist:linux": "electron-builder --linux --publish=never"
   },
   "dependencies": {
     "csv-parser": "^3.0.0"
@@ -39,15 +42,48 @@
     "icon": "assets/icon.png",
     "mac": {
       "category": "public.app-category.finance",
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
       "icon": "assets/icon.png"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "assets/icon.png"
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "assets/icon.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
   },
   "keywords": ["portfolio", "trading", "finance", "electron"],
