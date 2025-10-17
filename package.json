@@ -87,7 +87,10 @@
     }
   },
   "keywords": ["portfolio", "trading", "finance", "electron"],
-  "author": "",
+  "author": {
+    "name": "Richard Nelson",
+    "email": "wabz@whatsbeef.net"
+  },
   "license": "MIT"
 }
 
