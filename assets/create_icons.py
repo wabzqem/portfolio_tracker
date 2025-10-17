@@ -1,50 +1,35 @@
 #!/usr/bin/env python3
 """
-Create app icons for Portfolio Tracker Electron app
-This script generates icons in various sizes needed for different platforms
+Convert SVG icons to PNG for Portfolio Tracker Electron app
 """
-
-from PIL import Image, ImageDraw, ImageFont
 import os
+import cairosvg
 
-def create_portfolio_icon(size):
-    """Create a portfolio-themed icon"""
-    # Create a new image with transparent background
-    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+def convert_svg_to_png(size):
+    """Convert SVG icon to PNG for the given size"""
+    svg_file = f'icon-{size}x{size}.svg'
+    png_file = f'{size}x{size}.png'
     
-    # Define colors
-    bg_color = (34, 139, 34, 255)  # Forest green
-    accent_color = (255, 215, 0, 255)  # Gold
-    text_color = (255, 255, 255, 255)  # White
-    
-    # Draw rounded rectangle background
-    margin = size // 8
-    corner_radius = size // 6
-    
-    # Draw background circle
-    draw.ellipse([margin, margin, size-margin, size-margin], fill=bg_color)
-    
-    # Draw chart elements (representing portfolio growth)
-    chart_margin = size // 4
-    chart_width = size - 2 * chart_margin
-    chart_height = chart_width // 2
-    
-    # Draw bars representing portfolio performance
-    bar_width = chart_width // 5
-    bar_spacing = bar_width // 2
-    
-    for i in range(4):
-        x = chart_margin + i * (bar_width + bar_spacing)
-        bar_height = chart_height * (0.3 + i * 0.2)  # Ascending bars
-        y = chart_margin + chart_height - bar_height
+    if not os.path.exists(svg_file):
+        print(f"Warning: {svg_file} not found")
+        return False
         
-        draw.rectangle([x, y, x + bar_width, chart_margin + chart_height], fill=accent_color)
-    
-    # Draw upward arrow (growth indicator)
-    arrow_size = size // 6
-    arrow_x = size - chart_margin - arrow_size
-    arrow_y = chart_margin
+    try:
+        # Convert SVG to PNG
+        cairosvg.svg2png(
+            url=svg_file,
+            write_to=png_file,
+            output_width=size,
+            output_height=size
+        )
+        print(f"Creating {png_file} ({size}x{size})")
+        return True
+    except Exception as e:
+        print(f"Error converting {svg_file}: {e}")
+        return False
+
+def main():
+    print("Creating Portfolio Tracker icons...")
     
     # Arrow points
     points = [

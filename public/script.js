@@ -158,6 +158,7 @@ class PortfolioTracker {
     async loadAllGains() {
         try {
             this.allGains = await window.electronAPI.getCapitalGains(null);
+            console.log(this.allGains.filter(g => g.symbol === 'AMD251121C180000').sort((a, b) => a.capitalGain - b.capitalGain));
             
             // Update the overview view if it's currently active
             if (document.getElementById('capital-gains').classList.contains('active')) {
@@ -184,22 +185,11 @@ class PortfolioTracker {
         ).join('');
     }
 
-    // Header stats removed - data available in individual tabs
-
-    convertCapitalGainDisplay(audAmount) {
-        // Capital gains are always in AUD, convert for display if user wants USD
-        if (this.currentCurrency === 'USD') {
-            // Use approximate conversion rate (AUD to USD = AUD / 1.53)
-            return audAmount / 1.53;
-        }
-        return audAmount;
-    }
 
     // Calculate the discounted capital gain for long-term holdings (> 1 year)
     calculateDiscountedCapitalGain(gain) {
         const fullGain = gain.capitalGain;
-        // Use the backend-calculated isLongTerm field if available (more accurate FIFO)
-        const isLongTerm = gain.isLongTerm !== undefined ? gain.isLongTerm : gain.holdingPeriod >= 365;
+        const isLongTerm = gain.holdingPeriod >= 365;
         const shouldApplyDiscount = this.applyLongTermDiscount && isLongTerm && fullGain > 0;
         const discountedGain = shouldApplyDiscount ? fullGain / 2 : fullGain;
         
@@ -359,7 +349,7 @@ class PortfolioTracker {
                         ${optionsInfo ? '<div class="trade-type">OPTION</div>' : '<div class="trade-type">STOCK</div>'}
                     </div>
                     <div class="trade-pnl positive">
-                        ${this.formatCurrency(this.convertCapitalGainDisplay(trade.capitalGain))}
+                        ${this.formatCurrency(trade.capitalGain)}
                     </div>
                 </div>
             `;
@@ -387,7 +377,7 @@ class PortfolioTracker {
                         ${optionsInfo ? '<div class="trade-type">OPTION</div>' : '<div class="trade-type">STOCK</div>'}
                     </div>
                     <div class="trade-pnl negative">
-                        ${this.formatCurrency(this.convertCapitalGainDisplay(trade.capitalGain))}
+                        ${this.formatCurrency(trade.capitalGain)}
                     </div>
                 </div>
             `;
@@ -436,10 +426,25 @@ class PortfolioTracker {
             try {
                 const dateStr = trade['Order Time'];
                 if (dateStr && dateStr.trim() !== '') {
-                    // Parse date with timezone conversion
-                    const parsedDate = this.parseCSVDateWithTimezone(dateStr);
-                    if (parsedDate && !isNaN(parsedDate.getTime())) {
-                        orderTime = parsedDate.toLocaleDateString();
+                    // Remove timezone suffixes
+                    const cleanDate = dateStr.replace(' ET', '').replace(' AEST', '').replace(' AEDT', '');
+                    
+                    // Check if it's in DD/MM/YYYY format (common for expired options)
+                    const ddmmyyyy = cleanDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(.*)/);
+                    if (ddmmyyyy) {
+                        // Convert DD/MM/YYYY to MM/DD/YYYY format
+                        const [, day, month, year, timeStr] = ddmmyyyy;
+                        const convertedDate = `${month}/${day}/${year}${timeStr}`;
+                        const parsedDate = new Date(convertedDate);
+                        if (!isNaN(parsedDate.getTime())) {
+                            orderTime = parsedDate.toLocaleDateString();
+                        }
+                    } else {
+                        // Try parsing as-is (for other formats)
+                        const parsedDate = new Date(cleanDate);
+                        if (!isNaN(parsedDate.getTime())) {
+                            orderTime = parsedDate.toLocaleDateString();
+                        }
                     }
                 }
             } catch (error) {
@@ -1380,85 +1385,6 @@ class PortfolioTracker {
             });
         });
     }
-
-    parseCSVDateWithTimezone(dateString) {
-        if (!dateString) return new Date('1900-01-01');
-        
-        // Extract timezone from the original string
-        let timezone = null;
-        if (dateString.includes(' ET')) timezone = 'America/New_York';
-        else if (dateString.includes(' AEST')) timezone = 'Australia/Sydney';
-        else if (dateString.includes(' AEDT')) timezone = 'Australia/Sydney';
-        
-        // Remove timezone suffixes for parsing
-        const cleanDate = dateString.replace(' ET', '').replace(' AEST', '').replace(' AEDT', '');
-        
-        let parsedDate;
-        
-        // Check if it's in DD/MM/YYYY format (common for expired options)
-        const ddmmyyyy = cleanDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(.*)/);
-        if (ddmmyyyy) {
-            // Convert DD/MM/YYYY to MM/DD/YYYY format
-            const [, day, month, year, timeStr] = ddmmyyyy;
-            const convertedDate = `${month}/${day}/${year}${timeStr}`;
-            parsedDate = new Date(convertedDate);
-        } else {
-            // Try parsing as-is (for other formats)
-            parsedDate = new Date(cleanDate);
-        }
-        
-        if (isNaN(parsedDate.getTime())) {
-            console.warn('Could not parse date:', dateString);
-            return new Date('1900-01-01');
-        }
-        
-        // If we have a timezone, convert from that timezone to local timezone
-        if (timezone) {
-            return this.convertTimezoneToLocal(parsedDate, timezone);
-        }
-        
-        // If no timezone specified, assume it's already in local time
-        return parsedDate;
-    }
-
-    // Convert a date from a specific timezone to the user's local timezone
-    convertTimezoneToLocal(date, fromTimezone) {
-        try {
-            // Get the date components as they should be interpreted in the source timezone
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-            
-            // Create ISO string but treat it as if it were in the source timezone
-            const isoString = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
-            
-            // Parse as UTC to avoid local timezone interpretation
-            const asUtc = new Date(isoString + 'Z');
-            
-            // Get timezone offsets in May 2020 (the date we're testing)
-            let sourceOffsetHours = 0;
-            if (fromTimezone === 'America/New_York') {
-                // In May 2020, ET would be EDT (UTC-4)
-                sourceOffsetHours = -4;
-            } else if (fromTimezone === 'Australia/Sydney') {
-                // In May 2020, Australia would be AEST (UTC+10)
-                sourceOffsetHours = 10;
-            }
-            
-            // Convert from source timezone to UTC, then to local
-            const utcTime = asUtc.getTime() - (sourceOffsetHours * 60 * 60 * 1000);
-            const localDate = new Date(utcTime);
-            
-            return localDate;
-        } catch (error) {
-            console.warn('Timezone conversion failed, using original date:', error);
-            return date;
-        }
-    }
-
 
     parseOptionsSymbol(symbol) {
         // Format: Symbol ExpiryDate StrikePrice{C/P}

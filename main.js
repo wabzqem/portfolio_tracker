@@ -7,6 +7,11 @@ const https = require('https');
 // Set application name immediately
 app.setName('Portfolio Tracker');
 
+// Set the dock icon for macOS in development
+if (process.platform === 'darwin') {
+  app.dock.setIcon(path.join(__dirname, 'assets', '512x512.png'));
+}
+
 // Import data processing functions from server
 let currencyRates = new Map();
 let portfolioData = [];
@@ -239,6 +244,20 @@ function createMenu() {
       ]
     },
     {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'delete' },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
       label: 'View',
       submenu: [
         { role: 'reload' },
@@ -406,7 +425,15 @@ function loadPortfolioData(filePath = 'trades.csv') {
 }
 
 function createWindow() {
+  console.log('Creating window...');
   // Create the browser window
+  const iconPath = process.platform === 'darwin' 
+    ? path.join(__dirname, 'assets', '512x512.png')  // Use PNG for macOS
+    : path.join(__dirname, 'assets', 'icon.png');    // Use regular icon for other platforms
+
+  // Create application menu before window
+  createMenu();
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -415,7 +442,7 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     },
-    icon: path.join(__dirname, 'assets', 'icon.png'),
+    icon: iconPath,
     title: 'Portfolio Tracker',
     show: false // Don't show until ready
   });

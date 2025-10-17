@@ -1,7 +1,46 @@
 <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="8" cy="8" r="6" fill="#228B22"/>
-    <text x="8" y="12" font-family="Arial" font-size="5.333333333333333" fill="white" text-anchor="middle">$</text>
-    <rect x="4" y="5.333333333333333" width="2" height="4" fill="#FFD700"/>
-    <rect x="6.4" y="4.571428571428571" width="2" height="5.333333333333333" fill="#FFD700"/>
-    <rect x="8.88888888888889" y="4" width="2" height="6.4" fill="#FFD700"/>
+    <!-- Define gradients -->
+    <defs>
+      <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#2C5364"/>
+        <stop offset="50%" style="stop-color:#203A43"/>
+        <stop offset="100%" style="stop-color:#0F2027"/>
+      </linearGradient>
+      <linearGradient id="chartGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+        <stop offset="0%" style="stop-color:#00F260"/>
+        <stop offset="100%" style="stop-color:#0575E6"/>
+      </linearGradient>
+    </defs>
+
+    <!-- Background circle with subtle shadow -->
+    <circle cx="8" cy="8" r="8" fill="url(#bgGradient)"/>
+    
+    <!-- Stylized chart lines representing portfolio growth -->
+    <path d="M3.2 11.2
+             L5.6 8
+             L8 9.6
+             L10.4 7.2
+             L12.8 4.8"
+          stroke="url(#chartGradient)"
+          stroke-width="1"
+          fill="none"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+
+    <!-- Dots at data points -->
+    <circle cx="3.2" cy="11.2" r="0.5" fill="#00F260"/>
+    <circle cx="5.6" cy="8" r="0.5" fill="#00F260"/>
+    <circle cx="8" cy="9.6" r="0.5" fill="#00F260"/>
+    <circle cx="10.4" cy="7.2" r="0.5" fill="#00F260"/>
+    <circle cx="12.8" cy="4.8" r="0.5" fill="#00F260"/>
+
+    <!-- Subtle grid lines -->
+    <path d="M3.2 3.2 V12.8 M6.4 3.2 V12.8 M9.6 3.2 V12.8 M12.8 3.2 V12.8"
+          stroke="rgba(255,255,255,0.1)"
+          stroke-width="0.125"
+          stroke-dasharray="0.25"/>
+    <path d="M3.2 3.2 H12.8 M3.2 6.4 H12.8 M3.2 9.6 H12.8 M3.2 12.8 H12.8"
+          stroke="rgba(255,255,255,0.1)"
+          stroke-width="0.125"
+          stroke-dasharray="0.25"/>
   </svg>

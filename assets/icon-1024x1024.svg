@@ -1,7 +1,46 @@
 <svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="512" cy="512" r="510" fill="#228B22"/>
-    <text x="512" y="516" font-family="Arial" font-size="341.3333333333333" fill="white" text-anchor="middle">$</text>
-    <rect x="256" y="341.3333333333333" width="128" height="256" fill="#FFD700"/>
-    <rect x="409.6" y="292.57142857142856" width="128" height="341.3333333333333" fill="#FFD700"/>
-    <rect x="568.8888888888889" y="256" width="128" height="409.6" fill="#FFD700"/>
+    <!-- Define gradients -->
+    <defs>
+      <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#2C5364"/>
+        <stop offset="50%" style="stop-color:#203A43"/>
+        <stop offset="100%" style="stop-color:#0F2027"/>
+      </linearGradient>
+      <linearGradient id="chartGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+        <stop offset="0%" style="stop-color:#00F260"/>
+        <stop offset="100%" style="stop-color:#0575E6"/>
+      </linearGradient>
+    </defs>
+
+    <!-- Background circle with subtle shadow -->
+    <circle cx="512" cy="512" r="512" fill="url(#bgGradient)"/>
+    
+    <!-- Stylized chart lines representing portfolio growth -->
+    <path d="M204.8 716.8
+             L358.4 512
+             L512 614.4
+             L665.6 460.8
+             L819.2 307.2"
+          stroke="url(#chartGradient)"
+          stroke-width="64"
+          fill="none"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+
+    <!-- Dots at data points -->
+    <circle cx="204.8" cy="716.8" r="32" fill="#00F260"/>
+    <circle cx="358.4" cy="512" r="32" fill="#00F260"/>
+    <circle cx="512" cy="614.4" r="32" fill="#00F260"/>
+    <circle cx="665.6" cy="460.8" r="32" fill="#00F260"/>
+    <circle cx="819.2" cy="307.2" r="32" fill="#00F260"/>
+
+    <!-- Subtle grid lines -->
+    <path d="M204.8 204.8 V819.2 M409.6 204.8 V819.2 M614.4 204.8 V819.2 M819.2 204.8 V819.2"
+          stroke="rgba(255,255,255,0.1)"
+          stroke-width="8"
+          stroke-dasharray="16"/>
+    <path d="M204.8 204.8 H819.2 M204.8 409.6 H819.2 M204.8 614.4 H819.2 M204.8 819.2 H819.2"
+          stroke="rgba(255,255,255,0.1)"
+          stroke-width="8"
+          stroke-dasharray="16"/>
   </svg>

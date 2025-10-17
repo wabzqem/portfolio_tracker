@@ -1,7 +1,46 @@
 <svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="16" cy="16" r="14" fill="#228B22"/>
-    <text x="16" y="20" font-family="Arial" font-size="10.666666666666666" fill="white" text-anchor="middle">$</text>
-    <rect x="8" y="10.666666666666666" width="4" height="8" fill="#FFD700"/>
-    <rect x="12.8" y="9.142857142857142" width="4" height="10.666666666666666" fill="#FFD700"/>
-    <rect x="17.77777777777778" y="8" width="4" height="12.8" fill="#FFD700"/>
+    <!-- Define gradients -->
+    <defs>
+      <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#2C5364"/>
+        <stop offset="50%" style="stop-color:#203A43"/>
+        <stop offset="100%" style="stop-color:#0F2027"/>
+      </linearGradient>
+      <linearGradient id="chartGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+        <stop offset="0%" style="stop-color:#00F260"/>
+        <stop offset="100%" style="stop-color:#0575E6"/>
+      </linearGradient>
+    </defs>
+
+    <!-- Background circle with subtle shadow -->
+    <circle cx="16" cy="16" r="16" fill="url(#bgGradient)"/>
+    
+    <!-- Stylized chart lines representing portfolio growth -->
+    <path d="M6.4 22.4
+             L11.2 16
+             L16 19.2
+             L20.8 14.4
+             L25.6 9.6"
+          stroke="url(#chartGradient)"
+          stroke-width="2"
+          fill="none"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+
+    <!-- Dots at data points -->
+    <circle cx="6.4" cy="22.4" r="1" fill="#00F260"/>
+    <circle cx="11.2" cy="16" r="1" fill="#00F260"/>
+    <circle cx="16" cy="19.2" r="1" fill="#00F260"/>
+    <circle cx="20.8" cy="14.4" r="1" fill="#00F260"/>
+    <circle cx="25.6" cy="9.6" r="1" fill="#00F260"/>
+
+    <!-- Subtle grid lines -->
+    <path d="M6.4 6.4 V25.6 M12.8 6.4 V25.6 M19.2 6.4 V25.6 M25.6 6.4 V25.6"
+          stroke="rgba(255,255,255,0.1)"
+          stroke-width="0.25"
+          stroke-dasharray="0.5"/>
+    <path d="M6.4 6.4 H25.6 M6.4 12.8 H25.6 M6.4 19.2 H25.6 M6.4 25.6 H25.6"
+          stroke="rgba(255,255,255,0.1)"
+          stroke-width="0.25"
+          stroke-dasharray="0.5"/>
   </svg>
