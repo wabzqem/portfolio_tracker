@@ -157,8 +157,7 @@ class PortfolioTracker {
 
     async loadAllGains() {
         try {
-            this.allGains = await window.electronAPI.getCapitalGains(null);
-            console.log(this.allGains.filter(g => g.symbol === 'AMD251121C180000').sort((a, b) => a.capitalGain - b.capitalGain));
+            this.allGains = await window.electronAPI.getCapitalGainsAggregated(null);
             
             // Update the overview view if it's currently active
             if (document.getElementById('capital-gains').classList.contains('active')) {

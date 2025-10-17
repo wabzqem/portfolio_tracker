@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPortfolioSummary: (options) => ipcRenderer.invoke('get-portfolio-summary', options),
   getPositions: () => ipcRenderer.invoke('get-positions'),
   getCapitalGains: (financialYear) => ipcRenderer.invoke('get-capital-gains', financialYear),
+  getCapitalGainsAggregated: (financialYear) => ipcRenderer.invoke('get-capital-gains-aggregated', financialYear),
   getFinancialYears: () => ipcRenderer.invoke('get-financial-years'),
   
   // File operations
