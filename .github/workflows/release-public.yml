@@ -1,15 +1,9 @@
-name: Build Electron App
+name: Build and Release to Public Repository
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:
 
 jobs:
   build:
@@ -37,7 +31,7 @@ jobs:
         run: npm run dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false  # Disable code signing for now
+          CSC_IDENTITY_AUTO_DISCOVERY: false
       
       - name: Build Electron app (Windows)
         if: matrix.os == 'windows-latest'
@@ -59,7 +53,6 @@ jobs:
           path: |
             dist/*.dmg
             dist/*.zip
-            dist/mac/*.app
           if-no-files-found: warn
       
       - name: Upload Windows artifacts
@@ -69,7 +62,6 @@ jobs:
           name: windows-build
           path: |
             dist/*.exe
-            dist/*.msi
           if-no-files-found: warn
       
       - name: Upload Linux artifacts
@@ -80,15 +72,13 @@ jobs:
           path: |
             dist/*.AppImage
             dist/*.deb
-            dist/*.rpm
           if-no-files-found: warn
   
-  release:
+  release-to-public:
     needs: build
     runs-on: ubuntu-latest
     permissions:
-          contents: write # Required for creating/modifying releases
-    if: startsWith(github.ref, 'refs/tags/v')
+      contents: write
     
     steps:
       - name: Checkout code
@@ -102,15 +92,50 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R artifacts
       
-      - name: Create Release
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Create Release in Public Repository
         uses: softprops/action-gh-release@v1
         with:
+          repository: wabzqem/portfolio-tracker-releases
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: Portfolio Tracker ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## 📦 Downloads
+            
+            ### macOS
+            - **Apple Silicon (M1/M2/M3/M4)**: Download the `arm64.dmg` file
+            - **Intel**: Download the `x64.dmg` file
+            
+            ⚠️ **First-time users**: You'll need to run this command after installing:
+            ```bash
+            xattr -cr "/Applications/Portfolio Tracker.app"
+            ```
+            [See full macOS installation guide](https://github.com/wabzqem/portfolio-tracker-releases#macos-installation)
+            
+            ### Windows
+            - **Installer**: Download the `Setup.exe` file (recommended)
+            - **Portable**: Download the portable `.exe` file
+            
+            ### Linux
+            - **Universal**: Download the `.AppImage` file
+            - **Debian/Ubuntu**: Download the `.deb` file
+            
+            ---
+            
+            📖 [Full installation instructions](https://github.com/wabzqem/portfolio-tracker-releases#installation)
+            
+            🐛 [Report issues](https://github.com/wabzqem/portfolio-tracker-releases/issues)
+            
+            ## What's Changed
+            
+            ${{ github.event.head_commit.message }}
+          draft: false
+          prerelease: false
           files: |
             artifacts/macos-build/*
             artifacts/windows-build/*
             artifacts/linux-build/*
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_TOKEN }}
