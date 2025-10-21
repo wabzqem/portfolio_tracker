@@ -270,51 +270,6 @@ function createMenu() {
         { type: 'separator' },
         { role: 'togglefullscreen' }
       ]
-    },
-    {
-      label: 'Tools',
-      submenu: [
-        {
-          label: 'Switch Currency',
-          submenu: [
-            {
-              label: 'AUD (Australian Dollar)',
-              type: 'radio',
-              checked: true,
-              click: () => {
-                if (tradesLoaded) {
-                  mainWindow.webContents.send('switch-currency', 'AUD');
-                }
-              }
-            },
-            {
-              label: 'USD (US Dollar)',
-              type: 'radio',
-              click: () => {
-                if (tradesLoaded) {
-                  mainWindow.webContents.send('switch-currency', 'USD');
-                }
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      role: 'help',
-      submenu: [
-        {
-          label: 'About Portfolio Tracker',
-          click: () => {
-            dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: 'About Portfolio Tracker',
-              message: 'Portfolio Tracker',
-              detail: 'A professional desktop application for tracking investment portfolios.\n\nVersion: 1.0.0\nElectron-powered desktop app'
-            });
-          }
-        }
-      ]
     }
   ];
 
@@ -435,8 +390,8 @@ function createWindow() {
   createMenu();
 
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: 1600,
+    height: 1024,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
