@@ -1544,11 +1544,11 @@ function calculatePerformanceData(trades, timeframe = 'all', metric = 'cumulativ
       winRate: winRate,
       bestMonth: bestMonth ? {
         amount: bestMonth.totalPnL,
-        period: bestMonth.month
+        period: bestMonth.period
       } : null,
       worstMonth: worstMonth ? {
         amount: worstMonth.totalPnL,
-        period: worstMonth.month
+        period: worstMonth.period
       } : null
     },
     timeframe: timeframe,
