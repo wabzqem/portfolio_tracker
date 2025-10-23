@@ -358,7 +358,20 @@ function loadPortfolioData(filePath = 'trades.csv') {
       return;
     }
     
-    fs.createReadStream(filePath)
+    // Read file content and remove BOM (Byte Order Mark) if present
+    let fileContent = fs.readFileSync(filePath, 'utf8');
+    
+    // Remove UTF-8 BOM (\xEF\xBB\xBF) if present at the start of the file
+    if (fileContent.charCodeAt(0) === 0xFEFF) {
+      fileContent = fileContent.slice(1);
+      console.log('Removed BOM from CSV file');
+    }
+    
+    // Create a readable stream from the cleaned content
+    const { Readable } = require('stream');
+    const stream = Readable.from([fileContent]);
+    
+    stream
       .pipe(csv())
       .on('data', (row) => {
         // Add market information to each row (critical for currency conversion)
