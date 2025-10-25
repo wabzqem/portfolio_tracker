@@ -58,8 +58,6 @@ jobs:
           name: macos-build
           path: |
             dist/*.dmg
-            dist/*.zip
-            dist/mac/*.app
           if-no-files-found: warn
       
       - name: Upload Windows artifacts
