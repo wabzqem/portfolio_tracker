@@ -55,7 +55,7 @@ pages:
         cp -r ../portfolio-tracker-releases/CNAME public/ 2>/dev/null || true
       else
         echo "Creating basic releases page..."
-        cat > public/index.html <<'EOF'
+        cat > public/index.html << 'HTMLEOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -126,13 +126,13 @@ pages:
     </script>
 </body>
 </html>
-EOF
+HTMLEOF
       fi
     
     # Create a simple README if needed
     - |
       if [ ! -f "public/README.md" ]; then
-        cat > public/README.md <<'EOF'
+        cat > public/README.md << 'READMEEOF'
 # Portfolio Tracker
 
 Download the latest release for your platform from the [releases page](https://gitlab.com/wabzqem/portfolio-tracker/-/releases).
@@ -146,7 +146,7 @@ Download the latest release for your platform from the [releases page](https://g
 
 ## Privacy
 All data stays on your computer. No tracking, no analytics.
-EOF
+READMEEOF
       fi
   
   artifacts:
