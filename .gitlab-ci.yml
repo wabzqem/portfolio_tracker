@@ -1,0 +1,201 @@
+# GitLab CI/CD Pipeline for Portfolio Tracker
+# Builds Electron app and deploys to GitLab Pages
+
+stages:
+  - build
+  - deploy
+
+# Cache node_modules to speed up builds
+cache:
+  paths:
+    - node_modules/
+
+# Build the Electron application
+build:
+  stage: build
+  image: node:18-alpine
+  before_script:
+    # Install system dependencies needed for Electron builds
+    - apk add --no-cache python3 make g++ git
+  script:
+    # Install dependencies
+    - npm ci --prefer-offline
+    
+    # Build for all platforms (Linux, macOS, Windows)
+    # Using parallel builds to save time
+    - npm run build
+    
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+  only:
+    - tags
+    - main
+  # Use smaller runner if available
+  tags:
+    - docker
+
+# Deploy releases page to GitLab Pages
+pages:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    # Create public directory for GitLab Pages
+    - mkdir -p public
+    
+    # Copy the releases website files
+    - |
+      if [ -d "../portfolio-tracker-releases" ]; then
+        cp -r ../portfolio-tracker-releases/index.html public/
+        cp -r ../portfolio-tracker-releases/screen*.png public/ 2>/dev/null || true
+        cp -r ../portfolio-tracker-releases/README.md public/ 2>/dev/null || true
+        cp -r ../portfolio-tracker-releases/CNAME public/ 2>/dev/null || true
+      else
+        echo "Creating basic releases page..."
+        cat > public/index.html <<'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Tracker - Releases</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 { color: #333; }
+        .release {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            background: #f9f9f9;
+        }
+        .download-btn {
+            display: inline-block;
+            background: #0066cc;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        .download-btn:hover { background: #0052a3; }
+    </style>
+</head>
+<body>
+    <h1>Portfolio Tracker</h1>
+    <p>A professional desktop application for tracking investment portfolios.</p>
+    
+    <h2>Latest Releases</h2>
+    <div id="releases">Loading releases...</div>
+    
+    <script>
+        // Fetch releases from GitLab API
+        const projectId = encodeURIComponent(window.location.pathname.split('/')[1] + '/' + window.location.pathname.split('/')[2]);
+        fetch(`https://gitlab.com/api/v4/projects/${projectId}/releases`)
+            .then(r => r.json())
+            .then(releases => {
+                const container = document.getElementById('releases');
+                if (releases.length === 0) {
+                    container.innerHTML = '<p>No releases yet. Check back soon!</p>';
+                    return;
+                }
+                container.innerHTML = releases.map(r => `
+                    <div class="release">
+                        <h3>${r.name || r.tag_name}</h3>
+                        <p><small>Released: ${new Date(r.released_at).toLocaleDateString()}</small></p>
+                        <div>${r.description || 'No description'}</div>
+                        ${r.assets.links ? r.assets.links.map(link => 
+                            `<a href="${link.url}" class="download-btn">${link.name}</a>`
+                        ).join('') : ''}
+                    </div>
+                `).join('');
+            })
+            .catch(err => {
+                document.getElementById('releases').innerHTML = 
+                    '<p>Unable to load releases. Please visit the <a href="https://gitlab.com/wabzqem/portfolio-tracker/-/releases">releases page</a> directly.</p>';
+            });
+    </script>
+</body>
+</html>
+EOF
+      fi
+    
+    # Create a simple README if needed
+    - |
+      if [ ! -f "public/README.md" ]; then
+        cat > public/README.md <<'EOF'
+# Portfolio Tracker
+
+Download the latest release for your platform from the [releases page](https://gitlab.com/wabzqem/portfolio-tracker/-/releases).
+
+## Features
+- Trade tracking and portfolio management
+- Capital gains calculation (ATO-compliant FIFO)
+- Currency conversion (USD/AUD)
+- Options support
+- Performance analytics
+
+## Privacy
+All data stays on your computer. No tracking, no analytics.
+EOF
+      fi
+  
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
+  tags:
+    - docker
+
+# Optional: Create GitLab Release when tag is pushed
+create_release:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - |
+      echo "Creating GitLab Release for tag $CI_COMMIT_TAG"
+      
+      # Get all build artifacts from dist/ folder
+      ASSETS_JSON="[]"
+      
+      # Add download links for each platform build
+      if [ -d "dist" ]; then
+        for file in dist/*.{dmg,exe,AppImage,deb}; do
+          if [ -f "$file" ]; then
+            filename=$(basename "$file")
+            echo "Found build artifact: $filename"
+            # You'll need to upload these to GitLab Package Registry or external storage
+            # and add links here
+          fi
+        done
+      fi
+      
+      # Create release using GitLab API
+      curl --request POST \
+        --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        --header "Content-Type: application/json" \
+        --data "{
+          \"name\": \"Release $CI_COMMIT_TAG\",
+          \"tag_name\": \"$CI_COMMIT_TAG\",
+          \"description\": \"Automated release for Portfolio Tracker $CI_COMMIT_TAG\"
+        }" \
+        "https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/releases"
+  
+  dependencies:
+    - build
+  only:
+    - tags
+  tags:
+    - docker
