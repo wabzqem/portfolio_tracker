@@ -46,16 +46,9 @@ pages:
     # Create public directory for GitLab Pages
     - mkdir -p public
     
-    # Copy the releases website files
+    # Create a basic releases page
     - |
-      if [ -d "../portfolio-tracker-releases" ]; then
-        cp -r ../portfolio-tracker-releases/index.html public/
-        cp -r ../portfolio-tracker-releases/screen*.png public/ 2>/dev/null || true
-        cp -r ../portfolio-tracker-releases/README.md public/ 2>/dev/null || true
-        cp -r ../portfolio-tracker-releases/CNAME public/ 2>/dev/null || true
-      else
-        echo "Creating basic releases page..."
-        cat > public/index.html << 'HTMLEOF'
+      cat > public/index.html <<EOF
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -126,13 +119,11 @@ pages:
     </script>
 </body>
 </html>
-HTMLEOF
-      fi
+EOF
     
-    # Create a simple README if needed
+    # Create a simple README
     - |
-      if [ ! -f "public/README.md" ]; then
-        cat > public/README.md << 'READMEEOF'
+      cat > public/README.md <<EOF
 # Portfolio Tracker
 
 Download the latest release for your platform from the [releases page](https://gitlab.com/wabzqem/portfolio-tracker/-/releases).
@@ -146,8 +137,7 @@ Download the latest release for your platform from the [releases page](https://g
 
 ## Privacy
 All data stays on your computer. No tracking, no analytics.
-READMEEOF
-      fi
+EOF
   
   artifacts:
     paths:
