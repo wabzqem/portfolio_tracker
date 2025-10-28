@@ -13,4 +13,4 @@ build_macos_electron_app:
       - dist/*.dmg  # Assuming your build output goes into a 'dist' folder
     expire_in: 1 day
   only:
-    - master # Or your desired branch for triggering the build
+    - tags # Or your desired branch for triggering the build
