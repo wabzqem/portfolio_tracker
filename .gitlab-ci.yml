@@ -4,7 +4,7 @@ stages:
 build_macos_electron_app:
   stage: build
   tags:
-    - macos  # Ensure this tag matches your macOS runner's tag
+    - saas-macos-medium-m1
   script:
     - npm install  # Install project dependencies
     - npm run dist:mac # Replace with your actual build script in package.json
