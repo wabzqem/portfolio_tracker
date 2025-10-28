@@ -1,0 +1,16 @@
+stages:
+  - build
+
+build_macos_electron_app:
+  stage: build
+  tags:
+    - macos  # Ensure this tag matches your macOS runner's tag
+  script:
+    - npm install  # Install project dependencies
+    - npm run dist:mac # Replace with your actual build script in package.json
+  artifacts:
+    paths:
+      - dist/*.dmg  # Assuming your build output goes into a 'dist' folder
+    expire_in: 1 day
+  only:
+    - master # Or your desired branch for triggering the build
