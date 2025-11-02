@@ -153,22 +153,35 @@
             <div class="tab-content" id="capital-gains">
                 <div class="card">
                     <h3><i class="fas fa-calculator"></i> Capital Gains (ATO Compliant)</h3>
-                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(16, 185, 129, 0.1); border-radius: 10px; color: #047857; font-size: 0.9rem;">
+                    <div id="cgtMethodDescription" style="margin-bottom: 20px; padding: 15px; background: rgba(16, 185, 129, 0.1); border-radius: 10px; color: #047857; font-size: 0.9rem;">
                         <i class="fas fa-check-circle"></i> <strong>Tax-Accurate FIFO Calculation:</strong> This calculation uses proper First-In-First-Out methodology for tax reporting, and currency conversion on the date of trade. Use these figures for ATO capital gains declarations.
                     </div>
                     <div class="financial-year-selector" style="margin-bottom: 20px; padding: 20px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
                         <div class="filter-header" style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb;">
                             <h4 style="margin: 0; color: #374151; font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                                <i class="fas fa-calendar-alt"></i> Financial Year Selection
+                                <i class="fas fa-sliders-h"></i> Capital Gains Settings
                             </h4>
                         </div>
-                        <div class="filter-group" style="display: flex; flex-direction: column; gap: 6px; min-height: auto;">
-                            <label for="financialYearSelect" style="font-size: 0.9rem; font-weight: 500; color: #374151;">
-                                Select Financial Year:
-                            </label>
-                            <select id="financialYearSelect">
-                                <option value="">Loading...</option>
-                            </select>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div class="filter-group" style="display: flex; flex-direction: column; gap: 6px; min-height: auto;">
+                                <label for="financialYearSelect" style="font-size: 0.9rem; font-weight: 500; color: #374151;">
+                                    Financial Year:
+                                </label>
+                                <select id="financialYearSelect">
+                                    <option value="">Loading...</option>
+                                </select>
+                            </div>
+                            <div class="filter-group" style="display: flex; flex-direction: column; gap: 6px; min-height: auto;">
+                                <label for="cgtMethodSelect" style="font-size: 0.9rem; font-weight: 500; color: #374151;">
+                                    Calculation Method:
+                                </label>
+                                <select id="cgtMethodSelect">
+                                    <option value="fifo">FIFO (First In, First Out)</option>
+                                    <option value="lifo">LIFO (Last In, First Out)</option>
+                                    <option value="min_gain">Minimize Capital Gain</option>
+                                    <option value="max_gain">Maximize Capital Gain</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     <div class="table-container">

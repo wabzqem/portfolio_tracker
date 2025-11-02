@@ -762,13 +762,13 @@ function getFinancialYearFromDate(date) {
   return month >= 6 ? year : year - 1;
 }
 
-ipcMain.handle('get-capital-gains', (event, financialYear) => {
-  const capitalGains = calculateCapitalGains(portfolioData, financialYear, true);
+ipcMain.handle('get-capital-gains', (event, financialYear, method = 'fifo') => {
+  const capitalGains = calculateCapitalGains(portfolioData, financialYear, true, method);
   return capitalGains;
 });
 
-ipcMain.handle('get-capital-gains-aggregated', (event, financialYear) => {
-  const capitalGains = calculateCapitalGains(portfolioData, financialYear, false);
+ipcMain.handle('get-capital-gains-aggregated', (event, financialYear, method = 'fifo') => {
+  const capitalGains = calculateCapitalGains(portfolioData, financialYear, false, method);
   return capitalGains;
 });
 
@@ -924,13 +924,21 @@ function getCurrencySymbol(currency) {
 }
 
 // Calculate ATO-compliant capital gains
-function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = true) {
+// Capital gains calculation methods
+const CapitalGainsMethod = {
+  FIFO: 'fifo',        // First In, First Out (default/current)
+  LIFO: 'lifo',        // Last In, First Out
+  MIN_GAIN: 'min_gain', // Minimize capital gain
+  MAX_GAIN: 'max_gain'  // Maximize capital gain
+};
+
+function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = true, method = CapitalGainsMethod.FIFO) {
   // If no financial year specified, default to all trades since 2000
   const currentFY = financialYear ? parseInt(financialYear) : null;
   const cutoffDateStart = currentFY !== null ? new Date(`${currentFY}-07-01`) : new Date('2000-01-01');
   const cutoffDateEnd = currentFY !== null ? new Date(`${currentFY + 1}-06-30T23:59:59.999Z`) : new Date();
   
-  // Get ALL trades (not just recent ones) for proper FIFO calculation
+  // Get ALL trades (not just recent ones) for proper calculation
   const allFilledTrades = trades.filter(trade => isExecutedStatus(trade.Status));
   const symbolGroups = {};
   
@@ -941,9 +949,7 @@ function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = t
     
     const fillData = parseFilledAvg(trade['Filled@Avg Price'], symbol);
     const qty = fillData.qty;
-    const price = fillData.price; // Now includes multiplier
-    
-    // Always use calculated amount from Filled@Avg Price (authoritative source)
+    const price = fillData.price;
     const calculatedAmount = qty * price;
     const amount = calculatedAmount;
     
@@ -951,19 +957,17 @@ function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = t
       side: trade.Side,
       qty,
       price,
-      amount: amount, // Total Fill Amount already includes multiplier from aggregation
+      amount: amount,
       date: parseCSVDate(trade['Fill Time']),
       commission: getTradeCommission(trade),
       fees: getTradeFees(trade),
       symbol: symbol,
       name: trade.Name,
-      market: trade.market, // Add market info for currency conversion
-      // Store original amounts and date for later conversion
+      market: trade.market,
       originalAmount: amount,
       originalCommission: getTradeCommission(trade),
       originalFees: getTradeFees(trade),
       tradeDate: parseCSVDate(trade['Fill Time']),
-      // Convert all amounts to AUD for Capital Gains (ATO requirement)
       amountAUD: convertCurrency(amount, trade.market, 'AUD', parseCSVDate(trade['Fill Time'])),
       commissionAUD: convertCurrency(getTradeCommission(trade), trade.market, 'AUD', parseCSVDate(trade['Fill Time'])),
       feesAUD: convertCurrency(getTradeFees(trade), trade.market, 'AUD', parseCSVDate(trade['Fill Time']))
@@ -981,13 +985,13 @@ function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = t
     
     let holdings = [];
     
-    trades.forEach((trade, tradeIndex) => {
+    trades.forEach((trade) => {
       if (optionsInfo) {
         optionsInfo.didExpire = trade.isSynthetic || false;
       }
+      
       if (trade.side === 'Buy') {
-        // Convert to AUD using the original purchase date's exchange rate
-        const tradeDate = trade.tradeDate || trade.date; // Fallback to trade.date if tradeDate is undefined
+        const tradeDate = trade.tradeDate || trade.date;
         const originalAmount = trade.originalAmount !== undefined ? trade.originalAmount : trade.amount;
         const originalCommission = trade.originalCommission !== undefined ? trade.originalCommission : (trade.commission || 0);
         const originalFees = trade.originalFees !== undefined ? trade.originalFees : (trade.fees || 0);
@@ -1000,16 +1004,14 @@ function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = t
         holdings.push({
           qty: trade.qty,
           price: trade.price,
-          priceAUD: amountAUD / trade.qty, // AUD price per unit using purchase date rate
+          priceAUD: amountAUD / trade.qty,
           date: trade.date,
           cost: totalCost,
-          originalPurchaseRate: trade.market === 'US' ? getUSDToAUDRate(trade.tradeDate) : 1.0 // Store for debugging
+          originalPurchaseRate: trade.market === 'US' ? getUSDToAUDRate(trade.tradeDate) : 1.0
         });
       } else if (trade.side === 'Sell') {
-        // Include sells within the financial year date range, including synthetic sells for expired options within the period
         if (trade.date >= cutoffDateStart && trade.date <= cutoffDateEnd) {
-          // Convert sell amounts using the sell date's exchange rate
-          const tradeDate = trade.tradeDate || trade.date; // Fallback to trade.date if tradeDate is undefined
+          const tradeDate = trade.tradeDate || trade.date;
           const originalAmount = trade.originalAmount !== undefined ? trade.originalAmount : trade.amount;
           const originalCommission = trade.originalCommission !== undefined ? trade.originalCommission : (trade.commission || 0);
           const originalFees = trade.originalFees !== undefined ? trade.originalFees : (trade.fees || 0);
@@ -1018,143 +1020,202 @@ function calculateCapitalGains(trades, financialYear = null, splitByFIFOLots = t
           const sellCommissionAUD = convertCurrency(originalCommission, trade.market, 'AUD', tradeDate);
           const sellFeesAUD = convertCurrency(originalFees, trade.market, 'AUD', tradeDate);
           
-          let remainingQty = trade.qty;
-          let sellPricePerUnit = trade.qty > 0 ? sellAmountAUD / trade.qty : 0;
-          let totalCommissionAndFees = sellCommissionAUD + sellFeesAUD;
+          const sellPricePerUnit = trade.qty > 0 ? sellAmountAUD / trade.qty : 0;
+          const totalCommissionAndFees = sellCommissionAUD + sellFeesAUD;
           
-          if (splitByFIFOLots) {
-            // Process each FIFO lot separately to get correct holding periods
-            while (remainingQty > 0 && holdings.length > 0) {
-              const holding = holdings[0];
-              const qtyToSell = Math.min(remainingQty, holding.qty);
-              
-              const costPerShare = holding.cost / holding.qty;
-              const costBasis = costPerShare * qtyToSell;
-              
-              // Calculate proceeds for this lot (proportional to quantity)
-              const proceedsForLot = qtyToSell * sellPricePerUnit;
-              
-              // Allocate commission and fees proportionally
-              const commissionAndFeesForLot = totalCommissionAndFees * (qtyToSell / trade.qty);
-              
-              const netProceedsForLot = proceedsForLot - commissionAndFeesForLot;
-              const capitalGainForLot = netProceedsForLot - costBasis;
-              
-              // Calculate holding period for this specific lot
-              const holdingPeriod = Math.floor((trade.date.getTime() - holding.date.getTime()) / (1000 * 60 * 60 * 24));
-              
-              // Create separate capital gain entry for each FIFO lot
-              capitalGains.push({
-                symbol: symbol,
-                name: trade.name,
-                isOption: optionsInfo !== null,
-                optionsInfo: optionsInfo,
-                sellDate: trade.date,
-                buyDate: holding.date,
-                qty: qtyToSell,
-                sellPrice: sellPricePerUnit, // AUD price per unit
-                costBasis: costBasis,
-                proceeds: netProceedsForLot,
-                capitalGain: capitalGainForLot,
-                holdingPeriod: holdingPeriod,
-                isLongTerm: holdingPeriod >= LONG_TERM_HOLDING_DAYS,
-                currency: 'AUD', // Mark as AUD for display
-                market: trade.market // Original market for reference
-              });
-              
-              remainingQty -= qtyToSell;
-              holding.qty -= qtyToSell;
-              holding.cost -= costBasis; // Reduce cost proportionally when qty is reduced
-              
-              if (holding.qty === 0) {
-                holdings.shift();
-              }
-            }
-          } else {
-            // Aggregate all FIFO lots into a single capital gain entry
-            let totalCostBasis = 0;
-            let totalQtySold = 0;
-            let earliestBuyDate = null;
-            let totalHoldingPeriodWeighted = 0;
-            
-            while (remainingQty > 0 && holdings.length > 0) {
-              const holding = holdings[0];
-              const qtyToSell = Math.min(remainingQty, holding.qty);
-              
-              const costPerShare = holding.cost / holding.qty;
-              const costBasis = costPerShare * qtyToSell;
-              
-              totalCostBasis += costBasis;
-              totalQtySold += qtyToSell;
-              
-              // Track earliest buy date for aggregated display
-              if (!earliestBuyDate || holding.date < earliestBuyDate) {
-                earliestBuyDate = holding.date;
-              }
-              
-              // Calculate weighted holding period
-              const holdingPeriod = Math.floor((trade.date.getTime() - holding.date.getTime()) / (1000 * 60 * 60 * 24));
-              totalHoldingPeriodWeighted += holdingPeriod * qtyToSell;
-              
-              remainingQty -= qtyToSell;
-              holding.qty -= qtyToSell;
-              holding.cost -= costBasis;
-              
-              if (holding.qty === 0) {
-                holdings.shift();
-              }
-            }
-            
-            // Create single aggregated capital gain entry
-            if (totalQtySold > 0) {
-              const totalProceeds = trade.qty * sellPricePerUnit;
-              const netProceeds = totalProceeds - totalCommissionAndFees;
-              const capitalGain = netProceeds - totalCostBasis;
-              const avgHoldingPeriod = Math.floor(totalHoldingPeriodWeighted / totalQtySold);
-              
-              capitalGains.push({
-                symbol: symbol,
-                name: trade.name,
-                isOption: optionsInfo !== null,
-                optionsInfo: optionsInfo,
-                sellDate: trade.date,
-                buyDate: earliestBuyDate,
-                qty: totalQtySold,
-                sellPrice: sellPricePerUnit,
-                costBasis: totalCostBasis,
-                proceeds: netProceeds,
-                capitalGain: capitalGain,
-                holdingPeriod: avgHoldingPeriod,
-                isLongTerm: avgHoldingPeriod >= LONG_TERM_HOLDING_DAYS,
-                currency: 'AUD',
-                market: trade.market
-              });
-            }
-          }
+          // Process the sell using the specified method
+          const sellGains = processSellTrade(
+            holdings, 
+            trade, 
+            sellPricePerUnit, 
+            totalCommissionAndFees, 
+            symbol, 
+            optionsInfo, 
+            method, 
+            splitByFIFOLots
+          );
+          
+          capitalGains.push(...sellGains);
         } else {
           // For historical sells (before cutoff), still need to remove from holdings
-          let remainingQty = trade.qty;
-          
-          while (remainingQty > 0 && holdings.length > 0) {
-            const holding = holdings[0];
-            const qtyToSell = Math.min(remainingQty, holding.qty);
-            
-            // Calculate cost basis for the portion being sold
-            const costPerShare = holding.cost / holding.qty;
-            const costBasisToRemove = costPerShare * qtyToSell;
-            
-            remainingQty -= qtyToSell;
-            holding.qty -= qtyToSell;
-            holding.cost -= costBasisToRemove; // Reduce cost proportionally when qty is reduced
-            
-            if (holding.qty === 0) holdings.shift();
-          }
+          processHistoricalSell(holdings, trade, method);
         }
       }
     });
   });
   
   return capitalGains.sort((a, b) => b.sellDate - a.sellDate);
+}
+
+// Process a sell trade using the specified allocation method
+function processSellTrade(holdings, trade, sellPricePerUnit, totalCommissionAndFees, symbol, optionsInfo, method, splitByLots) {
+  const gains = [];
+  let remainingQty = trade.qty;
+  
+  if (splitByLots) {
+    // Process each lot separately
+    while (remainingQty > 0 && holdings.length > 0) {
+      const holdingIndex = selectHoldingIndex(holdings, method, sellPricePerUnit);
+      if (holdingIndex === -1) break;
+      
+      const holding = holdings[holdingIndex];
+      const qtyToSell = Math.min(remainingQty, holding.qty);
+      
+      const costPerShare = holding.cost / holding.qty;
+      const costBasis = costPerShare * qtyToSell;
+      const proceedsForLot = qtyToSell * sellPricePerUnit;
+      const commissionAndFeesForLot = totalCommissionAndFees * (qtyToSell / trade.qty);
+      const netProceedsForLot = proceedsForLot - commissionAndFeesForLot;
+      const capitalGainForLot = netProceedsForLot - costBasis;
+      const holdingPeriod = Math.floor((trade.date.getTime() - holding.date.getTime()) / (1000 * 60 * 60 * 24));
+      
+      gains.push({
+        symbol: symbol,
+        name: trade.name,
+        isOption: optionsInfo !== null,
+        optionsInfo: optionsInfo,
+        sellDate: trade.date,
+        buyDate: holding.date,
+        qty: qtyToSell,
+        sellPrice: sellPricePerUnit,
+        costBasis: costBasis,
+        proceeds: netProceedsForLot,
+        capitalGain: capitalGainForLot,
+        holdingPeriod: holdingPeriod,
+        isLongTerm: holdingPeriod >= LONG_TERM_HOLDING_DAYS,
+        currency: 'AUD',
+        market: trade.market
+      });
+      
+      remainingQty -= qtyToSell;
+      holding.qty -= qtyToSell;
+      holding.cost -= costBasis;
+      
+      if (holding.qty === 0) {
+        holdings.splice(holdingIndex, 1);
+      }
+    }
+  } else {
+    // Aggregate all lots into a single entry
+    let totalCostBasis = 0;
+    let totalQtySold = 0;
+    let earliestBuyDate = null;
+    let totalHoldingPeriodWeighted = 0;
+    
+    while (remainingQty > 0 && holdings.length > 0) {
+      const holdingIndex = selectHoldingIndex(holdings, method, sellPricePerUnit);
+      if (holdingIndex === -1) break;
+      
+      const holding = holdings[holdingIndex];
+      const qtyToSell = Math.min(remainingQty, holding.qty);
+      
+      const costPerShare = holding.cost / holding.qty;
+      const costBasis = costPerShare * qtyToSell;
+      
+      totalCostBasis += costBasis;
+      totalQtySold += qtyToSell;
+      
+      if (!earliestBuyDate || holding.date < earliestBuyDate) {
+        earliestBuyDate = holding.date;
+      }
+      
+      const holdingPeriod = Math.floor((trade.date.getTime() - holding.date.getTime()) / (1000 * 60 * 60 * 24));
+      totalHoldingPeriodWeighted += holdingPeriod * qtyToSell;
+      
+      remainingQty -= qtyToSell;
+      holding.qty -= qtyToSell;
+      holding.cost -= costBasis;
+      
+      if (holding.qty === 0) {
+        holdings.splice(holdingIndex, 1);
+      }
+    }
+    
+    if (totalQtySold > 0) {
+      const totalProceeds = trade.qty * sellPricePerUnit;
+      const netProceeds = totalProceeds - totalCommissionAndFees;
+      const capitalGain = netProceeds - totalCostBasis;
+      const avgHoldingPeriod = Math.floor(totalHoldingPeriodWeighted / totalQtySold);
+      
+      gains.push({
+        symbol: symbol,
+        name: trade.name,
+        isOption: optionsInfo !== null,
+        optionsInfo: optionsInfo,
+        sellDate: trade.date,
+        buyDate: earliestBuyDate,
+        qty: totalQtySold,
+        sellPrice: sellPricePerUnit,
+        costBasis: totalCostBasis,
+        proceeds: netProceeds,
+        capitalGain: capitalGain,
+        holdingPeriod: avgHoldingPeriod,
+        isLongTerm: avgHoldingPeriod >= LONG_TERM_HOLDING_DAYS,
+        currency: 'AUD',
+        market: trade.market
+      });
+    }
+  }
+  
+  return gains;
+}
+
+// Select which holding to use based on the allocation method
+function selectHoldingIndex(holdings, method, sellPricePerUnit) {
+  if (holdings.length === 0) return -1;
+  
+  switch (method) {
+    case CapitalGainsMethod.FIFO:
+      // First In, First Out - use oldest (index 0)
+      return 0;
+      
+    case CapitalGainsMethod.LIFO:
+      // Last In, First Out - use newest (last index)
+      return holdings.length - 1;
+      
+    case CapitalGainsMethod.MIN_GAIN:
+      // Minimize gain - use highest cost basis
+      return holdings.reduce((maxIndex, holding, index) => {
+        const costPerShare = holding.cost / holding.qty;
+        const maxCostPerShare = holdings[maxIndex].cost / holdings[maxIndex].qty;
+        return costPerShare > maxCostPerShare ? index : maxIndex;
+      }, 0);
+      
+    case CapitalGainsMethod.MAX_GAIN:
+      // Maximize gain - use lowest cost basis
+      return holdings.reduce((minIndex, holding, index) => {
+        const costPerShare = holding.cost / holding.qty;
+        const minCostPerShare = holdings[minIndex].cost / holdings[minIndex].qty;
+        return costPerShare < minCostPerShare ? index : minIndex;
+      }, 0);
+      
+    default:
+      return 0; // Default to FIFO
+  }
+}
+
+// Process historical sell (before cutoff) to maintain accurate holdings
+function processHistoricalSell(holdings, trade, method) {
+  let remainingQty = trade.qty;
+  
+  while (remainingQty > 0 && holdings.length > 0) {
+    const holdingIndex = selectHoldingIndex(holdings, method, 0);
+    if (holdingIndex === -1) break;
+    
+    const holding = holdings[holdingIndex];
+    const qtyToSell = Math.min(remainingQty, holding.qty);
+    
+    const costPerShare = holding.cost / holding.qty;
+    const costBasisToRemove = costPerShare * qtyToSell;
+    
+    remainingQty -= qtyToSell;
+    holding.qty -= qtyToSell;
+    holding.cost -= costBasisToRemove;
+    
+    if (holding.qty === 0) {
+      holdings.splice(holdingIndex, 1);
+    }
+  }
 }
 
 // Get synthetic sells for trades view (reuses capital gains logic)

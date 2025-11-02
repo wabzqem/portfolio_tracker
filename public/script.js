@@ -19,6 +19,7 @@ class PortfolioTracker {
         this.capitalGainsViewMode = 'by-symbol'; // Toggle between 'by-symbol' and 'by-underlying'
         this.applyLongTermDiscount = true; // Apply 50% discount for long-term capital gains
         this.currentCurrency = 'AUD'; // Default currency for portfolio summary
+        this.cgtMethod = 'fifo'; // Capital gains calculation method: 'fifo', 'lifo', 'min_gain', 'max_gain'
         this.performanceChart = null; // Chart.js instance
         this.performanceData = null; // Performance data cache
         this.init();
@@ -72,6 +73,39 @@ class PortfolioTracker {
                 this.selectedFinancialYear = e.target.value ? parseInt(e.target.value) : null;
                 this.loadCapitalGains();
             });
+        }
+
+        // CGT method selector
+        const cgtMethodSelect = document.getElementById('cgtMethodSelect');
+        if (cgtMethodSelect) {
+            cgtMethodSelect.addEventListener('change', (e) => {
+                this.cgtMethod = e.target.value;
+                this.updateCGTMethodDescription(e.target.value);
+                this.loadCapitalGains();
+            });
+        }
+    }
+
+    updateCGTMethodDescription(method) {
+        const descriptions = {
+            'fifo': '<i class="fas fa-check-circle"></i> <strong>Tax-Accurate FIFO Calculation:</strong> This calculation uses proper First-In-First-Out methodology for tax reporting, and currency conversion on the date of trade. Use these figures for ATO capital gains declarations.',
+            'lifo': '<i class="fas fa-info-circle"></i> <strong>LIFO (Last In, First Out):</strong> Matches the most recently purchased shares with sales. This may result in different capital gains compared to FIFO. <span style="color: #dc2626;">Not ATO-approved for tax reporting.</span>',
+            'min_gain': '<i class="fas fa-arrow-down"></i> <strong>Minimize Capital Gain:</strong> Selects shares with the highest cost basis to minimize taxable capital gains. Useful for tax planning scenarios. <span style="color: #dc2626;">Not ATO-approved for tax reporting.</span>',
+            'max_gain': '<i class="fas fa-arrow-up"></i> <strong>Maximize Capital Gain:</strong> Selects shares with the lowest cost basis to maximize capital gains. Useful for utilizing capital losses. <span style="color: #dc2626;">Not ATO-approved for tax reporting.</span>'
+        };
+        
+        const descriptionDiv = document.getElementById('cgtMethodDescription');
+        if (descriptionDiv && descriptions[method]) {
+            descriptionDiv.innerHTML = descriptions[method];
+            
+            // Update background color based on method
+            if (method === 'fifo') {
+                descriptionDiv.style.background = 'rgba(16, 185, 129, 0.1)';
+                descriptionDiv.style.color = '#047857';
+            } else {
+                descriptionDiv.style.background = 'rgba(251, 191, 36, 0.1)';
+                descriptionDiv.style.color = '#92400e';
+            }
         }
     }
 
@@ -147,7 +181,7 @@ class PortfolioTracker {
 
     async loadCapitalGains() {
         try {
-            this.capitalGains = await window.electronAPI.getCapitalGains(this.selectedFinancialYear);
+            this.capitalGains = await window.electronAPI.getCapitalGains(this.selectedFinancialYear, this.cgtMethod);
             
             // Update the capital gains view if it's currently active
             if (document.getElementById('capital-gains').classList.contains('active')) {
@@ -971,19 +1005,35 @@ class PortfolioTracker {
         const headerHtml = `
             <h3><i class="fas fa-calculator"></i> Capital Gains (Tax Reporting - ATO Compliant)</h3>
 
+            <div id="cgtMethodDescription" style="margin-bottom: 20px; padding: 15px; background: rgba(16, 185, 129, 0.1); border-radius: 10px; color: #047857; font-size: 0.9rem;">
+                <i class="fas fa-check-circle"></i> <strong>Tax-Accurate FIFO Calculation:</strong> This calculation uses proper First-In-First-Out methodology for tax reporting, and currency conversion on the date of trade. Use these figures for ATO capital gains declarations.
+            </div>
             <div class="financial-year-selector" style="margin-bottom: 20px; padding: 20px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
                 <div class="filter-header" style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb;">
                     <h4 style="margin: 0; color: #374151; font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                        <i class="fas fa-calendar-alt"></i> Financial Year Selection
+                        <i class="fas fa-sliders-h"></i> Capital Gains Settings
                     </h4>
                 </div>
-                <div class="filter-group" style="display: flex; flex-direction: column; gap: 6px; min-height: auto;">
-                    <label for="financialYearSelect" style="font-size: 0.9rem; font-weight: 500; color: #374151;">
-                        Select Financial Year:
-                    </label>
-                    <select id="financialYearSelect">
-                        <option value="">Loading...</option>
-                    </select>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="filter-group" style="display: flex; flex-direction: column; gap: 6px; min-height: auto;">
+                        <label for="financialYearSelect" style="font-size: 0.9rem; font-weight: 500; color: #374151;">
+                            Financial Year:
+                        </label>
+                        <select id="financialYearSelect">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <div class="filter-group" style="display: flex; flex-direction: column; gap: 6px; min-height: auto;">
+                        <label for="cgtMethodSelect" style="font-size: 0.9rem; font-weight: 500; color: #374151;">
+                            Calculation Method:
+                        </label>
+                        <select id="cgtMethodSelect">
+                            <option value="fifo">FIFO (First In, First Out)</option>
+                            <option value="lifo">LIFO (Last In, First Out)</option>
+                            <option value="min_gain">Minimize Capital Gain</option>
+                            <option value="max_gain">Maximize Capital Gain</option>
+                        </select>
+                    </div>
                 </div>
             </div>
                         <div style="margin-bottom: 20px; padding: 15px; background: rgba(59, 130, 246, 0.1); border-radius: 10px; border: 1px solid rgba(59, 130, 246, 0.2);">
@@ -1053,6 +1103,19 @@ class PortfolioTracker {
         if (financialYearSelect) {
             financialYearSelect.addEventListener('change', (e) => {
                 this.selectedFinancialYear = e.target.value ? parseInt(e.target.value) : null;
+                this.loadCapitalGains();
+            });
+        }
+        
+        // Re-attach the CGT method selector event listener
+        const cgtMethodSelect = document.getElementById('cgtMethodSelect');
+        if (cgtMethodSelect) {
+            // Set current value
+            cgtMethodSelect.value = this.cgtMethod;
+            // Add change listener
+            cgtMethodSelect.addEventListener('change', (e) => {
+                this.cgtMethod = e.target.value;
+                this.updateCGTMethodDescription(e.target.value);
                 this.loadCapitalGains();
             });
         }
